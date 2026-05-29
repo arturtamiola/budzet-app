@@ -511,25 +511,45 @@ async function loadData() {
   if (typeof syncDataModeSeg === 'function') syncDataModeSeg();
 
   if (STATE.dataMode === 'cloud') {
-    syncStart('Wczytywanie z chmury...');
-    try {
-      const r = await fetch(CLOUD_URL + '?action=getAll');
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      const j = await r.json();
-      if (!j.ok) throw new Error(j.error || 'unknown cloud error');
-      STATE.data = { wpisy: j.wpisy, templates: j.templates, plany: j.plany, meta: j.meta };
-      syncEnd();
-    } catch (e) {
-      syncEnd();
-      document.getElementById('app').innerHTML = `
-        <div class="loading">
-          Cloud fetch failed: ${e.message}<br><br>
-          Przełącz na Local w Ustawieniach albo sprawdź połączenie.
-        </div>
-      `;
-      return;
+    // Stale-while-revalidate: pokaż cache od razu, w tle pobierz świeże
+    let hadCache = false;
+    const cached = localStorage.getItem('cloudCache');
+    if (cached) {
+      try { STATE.data = JSON.parse(cached); hadCache = true; } catch (_) {}
     }
     STATE.localEdits = { ...EMPTY_EDITS };
+
+    const refresh = (async () => {
+      syncStart(hadCache ? 'Odświeżanie...' : 'Wczytywanie z chmury...');
+      try {
+        const r = await fetch(CLOUD_URL + '?action=getAll');
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const j = await r.json();
+        if (!j.ok) throw new Error(j.error || 'unknown cloud error');
+        STATE.data = { wpisy: j.wpisy, templates: j.templates, plany: j.plany, meta: j.meta };
+        try { localStorage.setItem('cloudCache', JSON.stringify(STATE.data)); } catch (_) {}
+        if (hadCache) render(); // podmień UI gdy świeże dane przyszły
+      } catch (e) {
+        if (!hadCache) {
+          document.getElementById('app').innerHTML = `
+            <div class="loading">
+              Cloud fetch failed: ${e.message}<br><br>
+              Przełącz na Local w Ustawieniach albo sprawdź połączenie.
+            </div>
+          `;
+        } else {
+          toast('Sync error: ' + e.message, 'err');
+        }
+      } finally {
+        syncEnd();
+      }
+    })();
+
+    if (!hadCache) {
+      await refresh;
+      if (!STATE.data) return;
+    }
+    // else: refresh leci w tle, kontynuujemy z cache
   } else {
     try {
       const r = await fetch('dane.json');
