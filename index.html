@@ -526,9 +526,15 @@ async function loadData() {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         const j = await r.json();
         if (!j.ok) throw new Error(j.error || 'unknown cloud error');
-        STATE.data = { wpisy: j.wpisy, templates: j.templates, plany: j.plany, meta: j.meta };
+        const fresh = { wpisy: j.wpisy, templates: j.templates, plany: j.plany };
+        const freshStr = JSON.stringify(fresh);
+        // Cache porównanie BEZ meta (meta.serverTime zmienia się przy każdym fetch)
+        const cachedNoMeta = STATE.data ? JSON.stringify({ wpisy: STATE.data.wpisy, templates: STATE.data.templates, plany: STATE.data.plany }) : null;
+        const identical = hadCache && cachedNoMeta === freshStr;
+        STATE.data = { ...fresh, meta: j.meta };
         try { localStorage.setItem('cloudCache', JSON.stringify(STATE.data)); } catch (_) {}
-        if (hadCache) render(); // podmień UI gdy świeże dane przyszły
+        if (hadCache && !identical) render();
+        if (identical) toast('Aktualne');
       } catch (e) {
         if (!hadCache) {
           document.getElementById('app').innerHTML = `
