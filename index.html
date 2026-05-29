@@ -1,0 +1,2401 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#FFE600">
+<title>Budżet</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Anton&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="/xlsx.min.js" defer></script>
+</head>
+<body class="light">
+<script>
+  // FOUC fix — ustaw klasę motywu PRZED renderem, na podstawie localStorage
+  (function () {
+    try {
+      var tm = localStorage.getItem('themeMode');
+      if (tm === 'dark') { document.body.className = 'dark'; }
+      else if (tm === 'auto') { document.body.className = ''; } // niech CSS @media kicknie
+      // 'light' i brak ustawienia: zostaje domyślne body.light (już w HTML)
+    } catch (e) {}
+  })();
+</script>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="mnav">
+    <span class="arr" id="prev-month">‹</span>
+    <span class="month" id="month-label">Kwiecień 26</span>
+    <span class="arr" id="next-month">›</span>
+  </div>
+  <div class="topright">
+    <span class="gear" id="today-btn" title="Bieżący miesiąc">
+      <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/><circle cx="12" cy="15" r="2" style="fill:var(--fg)" stroke="none"/></svg>
+    </span>
+    <span class="gear" id="gear-btn">
+      <svg viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+    </span>
+  </div>
+</div>
+
+<!-- MONTH PICKER -->
+<div class="mp-bg" id="mp-bg"></div>
+<div class="mpicker" id="mpicker">
+  <div class="mp-years" id="mp-years"></div>
+  <div class="mp-months" id="mp-months"></div>
+</div>
+
+<!-- APP CONTENT -->
+<div id="app">
+  <div class="loading">Wczytuję dane…</div>
+</div>
+
+<!-- HISTORIA LEGEND (poza #app żeby position:fixed działał, #app ma will-change:transform) -->
+<div id="tl-legend-host" class="tl-legend-fixed" style="display:none"></div>
+
+<!-- BOTTOM NAV -->
+<div class="bnav">
+  <div class="nav-item" data-view="home">
+    <div class="circle"><svg viewBox="0 0 24 24"><path d="M3 12L12 3l9 9M5 10v10h4v-6h6v6h4V10"/></svg></div>
+    <div class="lbl">Home</div>
+  </div>
+  <div class="nav-item" data-view="plan">
+    <div class="circle"><svg viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="12" rx="2"/><path d="M3 11h18"/></svg></div>
+    <div class="lbl">Plan</div>
+  </div>
+  <div class="nav-item" data-view="trans">
+    <div class="circle"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1.2"/><circle cx="4" cy="12" r="1.2"/><circle cx="4" cy="18" r="1.2"/></svg></div>
+    <div class="lbl">Trans.</div>
+  </div>
+  <div class="nav-item" data-view="timeline">
+    <div class="circle"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
+    <div class="lbl">Historia</div>
+  </div>
+  <div class="nav-item" data-view="charts">
+    <div class="circle"><svg viewBox="0 0 24 24"><path d="M4 20V8M10 20V4M16 20v-7M22 20H2"/></svg></div>
+    <div class="lbl">Wykresy</div>
+  </div>
+</div>
+
+<!-- ADD MODAL -->
+<div class="modal-bg" id="modal-bg"></div>
+<div class="sheet" id="add-sheet">
+  <div class="head add-head">
+    <div class="add-head-l">
+      <div class="title" id="add-title">Dodaj</div>
+      <div class="km-chips" id="add-kdir"></div>
+    </div>
+    <div class="close" data-close>×</div>
+  </div>
+  <div class="body" id="add-body"></div>
+  <div class="foot">
+    <button id="save-add" style="flex:1;background:var(--accent);color:var(--accent-fg);border:none;padding:18px;font-family:Anton;font-size:22px;letter-spacing:-0.5px;cursor:pointer">DODAJ</button>
+  </div>
+</div>
+
+<!-- PLAN EDIT -->
+<div class="sheet" id="plan-edit-sheet">
+  <div class="head">
+    <div class="title" id="plan-edit-title">Plan</div>
+    <div class="close" data-close>×</div>
+  </div>
+  <div class="body" id="plan-edit-body"></div>
+  <div class="foot" id="plan-edit-foot"></div>
+</div>
+
+<!-- LIGHTBOX EDYCJI -->
+<div class="sheet" id="edit-sheet">
+  <div class="head">
+    <div class="title">Edytuj</div>
+    <div class="close" data-close>×</div>
+  </div>
+  <div class="body" id="edit-body"></div>
+  <div class="foot" id="edit-foot"></div>
+</div>
+
+<!-- SETTINGS -->
+<div class="sheet sheet-modal" id="settings-sheet">
+  <div class="head">
+    <div class="title">Ustawienia</div>
+    <div class="close" data-close>×</div>
+  </div>
+  <div class="body" style="padding:0">
+    <div class="set-section"><div class="h">Wygląd</div></div>
+    <div class="set-row"><div><div class="lbl">Tryb ciemny</div><div class="sub">Auto = wg systemu</div></div>
+      <div class="seg-3" id="theme-seg">
+        <span class="seg" data-mode="auto">Auto</span>
+        <span class="seg" data-mode="light">Dzień</span>
+        <span class="seg" data-mode="dark">Noc</span>
+      </div>
+    </div>
+    <div class="set-row" data-toggle="big-text"><div><div class="lbl">Większe kwoty</div><div class="sub">Powiększa cyfry w listach</div></div><span class="toggle" id="t-big-text"></span></div>
+    <div class="set-section"><div class="h">Prywatność</div></div>
+    <div class="set-row" data-toggle="hide-amounts"><div><div class="lbl">Ukryj kwoty</div><div class="sub">Wszystko jako ••••</div></div><span class="toggle" id="t-hide"></span></div>
+    <div class="set-section"><div class="h">Dane</div></div>
+    <div class="set-row"><div><div class="lbl">Źródło danych</div><div class="sub">Local = serve.js + edits · Cloud = Sheets przez Apps Script</div></div>
+      <div class="seg-3" id="data-mode-seg">
+        <span class="seg" data-dm="local">Local</span>
+        <span class="seg" data-dm="cloud">Cloud</span>
+      </div>
+    </div>
+    <div class="set-row"><div style="width:100%"><div class="lbl">Cloud token</div><div class="sub">Wymagany do zapisu w Cloud mode. Musi zgadzać się z REQUIRED_TOKEN w Apps Script.</div>
+      <input type="password" id="cloud-token-input" placeholder="Wpisz token…" style="margin-top:6px;width:100%;padding:8px 10px;border:1px solid var(--border-2);border-radius:6px;background:var(--surface);color:var(--fg);font-size:12px;font-family:Inter">
+    </div></div>
+    <div class="set-row" id="sync-sheets"><div><div class="lbl">Sync z Google Sheets</div><div class="sub">Pobierz świeże dane z BUDŻET-TEST</div></div><span class="meta" id="sync-status">⟳</span></div>
+    <div class="set-row" id="show-diff"><div><div class="lbl">Pokaż lokalne zmiany</div><div class="sub" id="diff-sub">Twoje edycje vs Sheets</div></div><span class="meta">⊟</span></div>
+    <div class="set-row" id="backup-status"><div><div class="lbl">Backupy lokalne</div><div class="sub" id="backup-sub">Auto-zapis przy każdej zmianie</div></div><span class="meta" id="backup-meta">…</span></div>
+    <div class="set-row" id="export-xlsx"><div><div class="lbl">Eksport miesiąca (.xlsx)</div><div class="sub">Wybierz mc i pobierz Excel</div></div><span class="meta">↓</span></div>
+    <div class="set-section"><div class="h">Info</div></div>
+    <div class="set-row"><div><div class="lbl">Tryb</div><div class="sub" id="tryb-sub">Local · dane.json + edits</div></div><span class="meta" id="tryb-dot">●</span></div>
+    <div style="padding:24px;text-align:center;color:var(--muted-4);font-size:10px;letter-spacing:1.5px">Prototyp v0.1 · Mobile-first</div>
+  </div>
+</div>
+
+<div class="sheet sheet-modal" id="diff-sheet">
+  <div class="head">
+    <div class="title">Lokalne zmiany</div>
+    <div class="close" data-close>×</div>
+  </div>
+  <div class="body" id="diff-body" style="padding:16px"></div>
+</div>
+
+<script>
+// ============== CONFIG ==============
+const ML = ['Sty','Lut','Mar','Kwi','Maj','Cze','Lip','Sie','Wrz','Paź','Lis','Gru'];
+const ML_FULL = ['Styczeń','Luty','Marzec','Kwiecień','Maj','Czerwiec','Lipiec','Sierpień','Wrzesień','Październik','Listopad','Grudzień'];
+const CATS = ['Firma','Nela','Dom','Transport','Restauracje','Sport','Zakupy','Podroze','Ubrania','Fryzjer','Marta Zdrowie','Artur Zdrowie','Inne','Koty'];
+
+// Apka NIE wykrywa anomalii ani niczego automatycznie — czyta tag `anomalia: true` z danych.
+// Konwersja/wykrywanie jest w convert-data.js (lub Apps Script przy migracji online).
+
+const CAT_ICONS = {
+  Firma: '<path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/>',
+  Nela: '<circle cx="12" cy="7" r="3"/><path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/>',
+  Dom: '<path d="M3 12l9-9 9 9M5 10v10h14V10"/>',
+  Transport: '<path d="M5 17h14M7 17V9c0-2 2-3 5-3s5 1 5 3v8M3 21h18"/>',
+  Restauracje: '<path d="M6 2v8M10 2v8M8 10v12M14 2v20"/>',
+  Sport: '<circle cx="12" cy="12" r="5"/><path d="M3 12h2M19 12h2M12 3v2M12 19v2"/>',
+  Zakupy: '<path d="M3 6h18l-2 14H5L3 6zM8 6V4a4 4 0 0 1 8 0v2"/>',
+  Podroze: '<path d="M22 16l-10 4-10-4 10-4 10 4z"/><path d="M2 8l10 4 10-4-10-4-10 4z"/>',
+  Ubrania: '<path d="M4 6l4-4h8l4 4v3l-4 1v11H8V10L4 9V6z"/>',
+  Fryzjer: '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4L8.5 15.5"/>',
+  'Marta Zdrowie': '<rect x="6" y="4" width="12" height="16" rx="6"/><path d="M9 12h6"/>',
+  'Artur Zdrowie': '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>',
+  Inne: '<rect x="3" y="7" width="18" height="14" rx="2"/><path d="M3 11h18M8 7V3M16 7V3"/>',
+  Koty: '<circle cx="12" cy="14" r="6"/><circle cx="7" cy="6" r="2"/><circle cx="17" cy="6" r="2"/>',
+  Pensja: '<path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
+};
+const catIcon = k => CAT_ICONS[k] || CAT_ICONS.Inne;
+
+// Kolory kategorii dla Timeline stacked bars (i potencjalnie innych wykresów)
+const CAT_COLOR = {
+  Firma: '#fbbf24', Nela: '#ec4899', Dom: '#8b5cf6', Transport: '#3b82f6',
+  Restauracje: '#f97316', Sport: '#22c55e', Zakupy: '#a855f7', Podroze: '#14b8a6',
+  Ubrania: '#f43f5e', Fryzjer: '#d946ef', 'Marta Zdrowie': '#ef4444',
+  'Artur Zdrowie': '#dc2626', Inne: '#94a3b8', Koty: '#eab308',
+};
+const catColor = k => CAT_COLOR[k] || '#94a3b8';
+
+// ============== STATE ==============
+const STATE = {
+  data: null,           // loaded from dane.json
+  view: 'home',         // home | plan | trans | charts | timeline
+  yr: new Date().getFullYear(),
+  mi: new Date().getMonth() + 1,  // 1-12 — domyślnie bieżący mc
+  filter: null,         // category filter
+  transShowAll: false,  // Trans: pokaż wszystkie chipy kategorii po kliknięciu "więcej"
+  chartCat: 'Firma',    // for charts view
+  chartZakres: '1',     // Wykresy zakres: '0.5' | '1' | '2' | 'all' (pół roku/rok/2 lata/całość)
+  tlBucket: '3mc',      // Timeline bucket: '3mc' | '6mc' | 'rok'
+  tlZakres: '2',        // Timeline zakres: '1' | '2' | '3' | 'all' (lata wstecz)
+  tlHiddenCats: {},     // Timeline ukryte kategorie {kat: true}
+  tlShowAllCats: false, // Timeline: rozwiń pełną siatkę kategorii w legendzie
+  // Settings
+  themeMode: 'light', // 'auto' | 'light' | 'dark' — domyślnie dzień
+  bigText: false,
+  hideAmounts: false,
+  dataMode: 'local',  // 'local' (serve.js + edits) | 'cloud' (Apps Script doPost writeback)
+  cloudToken: '',     // token do Apps Script doPost (musi się zgadzać z REQUIRED_TOKEN w .gs)
+  // Local edits (overrides from sheet/json)
+  localEdits: {
+    added: [],            // nowe wpisy
+    deleted: [],          // hard-delete ids (legacy)
+    updated: {},          // {wpis_id: {...patch}}
+    templates: {},        // {template_id: {...patch}}  — override szacunku "od teraz na stałe"
+    planOverrides: {},
+    paidRecurring: {},
+  },
+};
+
+// ============== THEME ==============
+function applyTheme() {
+  document.body.classList.remove('dark', 'light');
+  if (STATE.themeMode === 'dark') document.body.classList.add('dark');
+  else if (STATE.themeMode === 'light') document.body.classList.add('light');
+  const isDark = STATE.themeMode === 'dark' || (STATE.themeMode === 'auto' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  const tc = document.querySelector('meta[name="theme-color"]');
+  if (tc) tc.setAttribute('content', isDark ? '#0a0a0a' : '#FFE600');
+  syncThemeSeg();
+}
+function syncThemeSeg() {
+  document.querySelectorAll('#theme-seg .seg').forEach(s => s.classList.toggle('active', s.getAttribute('data-mode') === STATE.themeMode));
+}
+function syncDataModeSeg() {
+  document.querySelectorAll('#data-mode-seg .seg').forEach(s => s.classList.toggle('active', s.getAttribute('data-dm') === STATE.dataMode));
+  const sub = document.getElementById('tryb-sub');
+  if (sub) sub.textContent = STATE.dataMode === 'cloud' ? 'Cloud · Apps Script (read-only)' : 'Local · dane.json + edits';
+}
+
+// ============== UTILS ==============
+const fmt = n => Number(n).toLocaleString('pl-PL').replace(/ /g, ' ');
+const fmtAmt = n => STATE.hideAmounts ? '••••' : fmt(Math.abs(n));
+const $ = sel => document.querySelector(sel);
+const $$ = sel => document.querySelectorAll(sel);
+const el = (tag, attrs = {}, children = []) => {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'class') e.className = v;
+    else if (k === 'html') e.innerHTML = v;
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v);
+  }
+  for (const c of [].concat(children)) {
+    if (c == null) continue;
+    e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+  }
+  return e;
+};
+
+// ============== DIALOG + TOAST (zastępują natywne confirm/alert) ==============
+function dialog({ title, message = '', buttons }) {
+  return new Promise(resolve => {
+    let bg, box;
+    const close = (v) => { bg.remove(); box.remove(); document.removeEventListener('keydown', onKey); resolve(v); };
+    const onKey = (e) => { if (e.key === 'Escape') close(null); };
+    bg = el('div', { class: 'dlg-bg', onclick: () => close(null) });
+    box = el('div', { class: 'dlg-box' }, [
+      el('div', { class: 'dlg-title' }, [title]),
+      message ? el('div', { class: 'dlg-msg' }, [message]) : null,
+      el('div', { class: 'dlg-btns' }, buttons.map(b =>
+        el('button', { class: 'dlg-btn ' + (b.style || 'outline'), onclick: () => close(b.value) }, [b.label])
+      )),
+    ]);
+    document.body.appendChild(bg);
+    document.body.appendChild(box);
+    document.addEventListener('keydown', onKey);
+  });
+}
+
+// ============== EXPORT XLSX ==============
+function buildMonthSheet(rok, mi) {
+  const all = getAllWpisy();
+  const monthWpisy = all.filter(w => w.rok === rok && w.miesiac === mi);
+
+  // Dla Stałych placeholder (kw=0) — szacunek z template; pomijaj inne 0-wpisy
+  const effectiveKw = w => {
+    if (w.typ === 'stale' && (!w.kwota || w.kwota === 0)) {
+      const s = getSzacunek(w);
+      return s > 0 ? s : null;
+    }
+    return w.kwota > 0 ? w.kwota : null;
+  };
+  const wydatki = monthWpisy
+    .filter(w => w.kierunek === 'wydatek')
+    .map(w => ({ ...w, _kw: effectiveKw(w) }))
+    .filter(w => w._kw != null);
+  const przychody = monthWpisy.filter(w => w.kierunek === 'przychod' && w.kwota > 0);
+
+  // === LAYOUT (1-indexed rows w arkuszu) ===
+  // 1   HERO label "Zarobione"        | =SUM(G:G trans)
+  // 2   HERO label "Planowane wydatki" | suma planów (statyczne)
+  // 3   HERO label "Wydane"           | =SUM(B:B trans)
+  // 4   HERO label "Wolny budżet"     | =B1-B3
+  // 5   (blank)
+  // 6   "Kategoria" | "Plan" | "Wydane" | "% planu" | "Różnica"
+  // 7-K per CATS (Wydane = SUMIF formuła)
+  // S   "SUMA"     | =SUM Plan | =SUM Wydane | =formuła % | =formuła Różnica
+  // S+1 (blank)
+  // S+2 "Transakcje" (label)
+  // S+3 "Wydatki" | | | | | "Przychody" | |
+  // S+4 "Data" | "Kwota" | "Opis" | "Kategoria" | | "Data" | "Kwota" | "Opis"
+  // S+5...  dane (bufor: max(wydatki, przychody, 30) wierszy żeby user mógł dopisać)
+
+  const TRANS_LABEL_ROW = 6 + CATS.length + 1 + 2;  // S+2
+  const TRANS_HEADER_ROW = TRANS_LABEL_ROW + 2;     // S+4
+  const TRANS_START = TRANS_HEADER_ROW + 1;         // S+5
+  const dataRows = Math.max(wydatki.length, przychody.length, 30); // bufor 30 dla dopisywania
+  const TRANS_END = TRANS_START + dataRows - 1;
+  const SUMA_ROW = 6 + CATS.length + 1;             // 6 + CATS + 1 = S
+  const KAT_FIRST = 7;
+  const KAT_LAST = 6 + CATS.length;
+
+  const sumifWyd = kat => `SUMIF(D${TRANS_START}:D${TRANS_END},"${kat}",B${TRANS_START}:B${TRANS_END})`;
+
+  // Buduj aoa (placeholders, formuły patchne potem)
+  const aoa = [];
+  // Wiersze 1-4: HERO
+  aoa.push(['Zarobione', null, '', '', '', '', '', '']);
+  aoa.push(['Planowane wydatki', null, '', '', '', '', '', '']);
+  aoa.push(['Wydane', null, '', '', '', '', '', '']);
+  aoa.push(['Wolny budżet', null, '', '', '', '', '', '']);
+  aoa.push(['', '', '', '', '', '', '', '']);
+  // Wiersz 6: nagłówek kategorii
+  aoa.push(['Kategoria', 'Plan', 'Wydane', '% planu', 'Różnica', '', '', '']);
+  // Wiersze 7..KAT_LAST: per CAT
+  let sumaPlan = 0;
+  CATS.forEach(kat => {
+    const plan = getPlan(kat, rok, mi);
+    sumaPlan += plan;
+    aoa.push([kat, plan || 0, null, null, null, '', '', '']);
+  });
+  // Wiersz SUMA
+  aoa.push(['SUMA', null, null, null, null, '', '', '']);
+  // Blank
+  aoa.push(['', '', '', '', '', '', '', '']);
+  // TRANSAKCJE label + Wydatki/Przychody header
+  aoa.push(['Transakcje', '', '', '', '', '', '', '']);
+  aoa.push(['Wydatki', '', '', '', '', 'Przychody', '', '']);
+  aoa.push(['Data', 'Kwota', 'Opis', 'Kategoria', '', 'Data', 'Kwota', 'Opis']);
+  for (let i = 0; i < dataRows; i++) {
+    const w = wydatki[i];
+    const p = przychody[i];
+    aoa.push([
+      w?.data || '', w?._kw ?? '', w?.nazwa || '', w?.kategoria || '',
+      '',
+      p?.data || '', p?.kwota ?? '', p?.nazwa || '',
+    ]);
+  }
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+  // === FORMUŁY ===
+  // HERO
+  ws[`B1`] = { t: 'n', f: `SUM(G${TRANS_START}:G${TRANS_END})` };
+  ws[`B2`] = { t: 'n', v: sumaPlan };
+  ws[`B3`] = { t: 'n', f: `SUM(B${TRANS_START}:B${TRANS_END})` };
+  ws[`B4`] = { t: 'n', f: `B1-B3` };
+  // Per CAT
+  CATS.forEach((kat, i) => {
+    const r = KAT_FIRST + i;
+    ws[`C${r}`] = { t: 'n', f: sumifWyd(kat) };
+    ws[`D${r}`] = { t: 'n', f: `IFERROR(C${r}/B${r},"")`, z: '0%' };
+    ws[`E${r}`] = { t: 'n', f: `B${r}-C${r}` };
+  });
+  // SUMA
+  ws[`B${SUMA_ROW}`] = { t: 'n', f: `SUM(B${KAT_FIRST}:B${KAT_LAST})` };
+  ws[`C${SUMA_ROW}`] = { t: 'n', f: `SUM(C${KAT_FIRST}:C${KAT_LAST})` };
+  ws[`D${SUMA_ROW}`] = { t: 'n', f: `IFERROR(C${SUMA_ROW}/B${SUMA_ROW},"")`, z: '0%' };
+  ws[`E${SUMA_ROW}`] = { t: 'n', f: `B${SUMA_ROW}-C${SUMA_ROW}` };
+
+  ws['!cols'] = [{ wch: 22 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 24 }];
+  // Update !ref żeby pokrywało dodane formuły (czasem aoa_to_sheet ustawia ciaśniej)
+  ws['!ref'] = `A1:H${TRANS_END}`;
+  return ws;
+}
+
+async function exportMonthXlsx() {
+  if (typeof XLSX === 'undefined') { toast('Biblioteka XLSX nie załadowana — odśwież stronę', 'err'); return; }
+  const all = getAllWpisy();
+  const monthSet = new Set();
+  all.forEach(w => monthSet.add(w.rok * 12 + w.miesiac));
+  const months = [...monthSet].sort((a, b) => b - a).map(k => ({ rok: Math.floor((k - 1) / 12), mi: ((k - 1) % 12) + 1 }));
+  if (!months.length) { toast('Brak danych do eksportu', 'err'); return; }
+
+  const result = await new Promise(resolve => {
+    const selected = new Set();
+    let bg, box, gridEl, hintEl;
+    const close = (v) => { bg.remove(); box.remove(); resolve(v); };
+    const updateChip = (cell, key) => cell.style.cssText = selected.has(key)
+      ? 'padding:10px 6px;text-align:center;background:var(--accent);color:var(--accent-fg);border-radius:6px;cursor:pointer;font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase'
+      : 'padding:10px 6px;text-align:center;background:var(--surface);color:var(--fg);border-radius:6px;cursor:pointer;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase';
+    const updateHint = () => { hintEl.textContent = selected.size ? `${selected.size} mc zaznaczone` : 'Kliknij miesiące, potem Pobierz'; };
+    bg = el('div', { class: 'dlg-bg', onclick: () => close(null) });
+    gridEl = el('div', { style: 'display:grid;grid-template-columns:repeat(3, 1fr);gap:6px;max-height:45vh;overflow-y:auto;margin-bottom:10px' },
+      months.map(m => {
+        const key = m.rok + '_' + m.mi;
+        const cell = el('div', {
+          onclick: () => {
+            if (selected.has(key)) selected.delete(key); else selected.add(key);
+            updateChip(cell, key);
+            updateHint();
+          },
+        }, [`${ML[m.mi - 1]} '${String(m.rok).slice(2)}`]);
+        updateChip(cell, key);
+        return cell;
+      })
+    );
+    hintEl = el('div', { style: 'font-size:10px;color:var(--muted);text-align:center;margin-bottom:14px;letter-spacing:1px;text-transform:uppercase;font-weight:600' }, ['Kliknij miesiące, potem Pobierz']);
+    box = el('div', { class: 'dlg-box' }, [
+      el('div', { class: 'dlg-title' }, ['Eksport miesięcy']),
+      el('div', { class: 'dlg-msg' }, ['Wybierz 1 lub więcej mc. Jeden plik = jeden mc.']),
+      gridEl,
+      hintEl,
+      el('div', { class: 'dlg-btns' }, [
+        el('button', { class: 'dlg-btn primary', onclick: () => close([...selected].map(k => { const [r, m] = k.split('_').map(Number); return { rok: r, mi: m }; })) }, ['Pobierz']),
+        el('button', { class: 'dlg-btn cancel', onclick: () => close(null) }, ['Anuluj']),
+      ]),
+    ]);
+    document.body.appendChild(bg);
+    document.body.appendChild(box);
+  });
+  if (!result || !result.length) return;
+
+  // Generuj osobny xlsx per mc (każdy w formacie zgodnym z szablonem GS)
+  for (const { rok, mi } of result) {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, buildMonthSheet(rok, mi), 'Transakcje');
+    const fname = `${String(mi).padStart(2, '0')}-${rok} - Artur - Budżet miesięczny.xlsx`;
+    XLSX.writeFile(wb, fname);
+    // Krótki delay między downloadami żeby przeglądarka nie zablokowała
+    if (result.length > 1) await new Promise(r => setTimeout(r, 300));
+  }
+  toast(`Pobrano ${result.length} ${result.length === 1 ? 'plik' : 'plików'}`);
+}
+
+async function confirmDialog(title, message = '', okLabel = 'Potwierdź', okStyle = 'danger') {
+  const v = await dialog({ title, message, buttons: [
+    { label: okLabel, value: true, style: okStyle },
+    { label: 'Anuluj', value: false, style: 'cancel' },
+  ]});
+  return v === true;
+}
+
+let syncDepth = 0;
+function syncStart(label) {
+  syncDepth++;
+  let p = document.getElementById('sync-pill');
+  if (!p) {
+    p = el('div', { id: 'sync-pill', class: 'sync-pill' }, [
+      el('span', { class: 'spinner' }),
+      el('span', { id: 'sync-pill-text' }, [label || 'Synchronizacja...']),
+    ]);
+    document.body.appendChild(p);
+  } else {
+    document.getElementById('sync-pill-text').textContent = label || 'Synchronizacja...';
+  }
+  p.classList.add('show');
+}
+function syncEnd() {
+  syncDepth = Math.max(0, syncDepth - 1);
+  if (syncDepth === 0) {
+    const p = document.getElementById('sync-pill');
+    if (p) p.classList.remove('show');
+  }
+}
+
+let toastTimer = null;
+function toast(msg, type = 'ok') {
+  document.querySelectorAll('.toast').forEach(t => t.remove());
+  if (toastTimer) clearTimeout(toastTimer);
+  const t = el('div', { class: 'toast ' + type }, [msg]);
+  document.body.appendChild(t);
+  requestAnimationFrame(() => t.classList.add('show'));
+  toastTimer = setTimeout(() => {
+    t.classList.remove('show');
+    setTimeout(() => t.remove(), 220);
+  }, 2500);
+}
+
+// ============== DATA LOADING ==============
+const CLOUD_URL = 'https://script.google.com/macros/s/AKfycby1qc3GuHZMKifri5L1yMQ4jDox1uLHezQgT3k5uJU0PR3w9Dt1U0awvxUtGOxpF71w5A/exec';
+const EMPTY_EDITS = { added: [], updated: {}, deleted: [], templates: {}, addedTemplates: [], deletedTemplates: [], planOverrides: {}, paidRecurring: {} };
+
+async function loadData() {
+  document.body.classList.add('fonts-loading');
+  // Restore dataMode + cloudToken z localStorage zanim cokolwiek
+  const dm = localStorage.getItem('dataMode');
+  if (dm === 'local' || dm === 'cloud') STATE.dataMode = dm;
+  const tk = localStorage.getItem('cloudToken');
+  if (tk) STATE.cloudToken = tk;
+  if (typeof syncDataModeSeg === 'function') syncDataModeSeg();
+
+  if (STATE.dataMode === 'cloud') {
+    syncStart('Wczytywanie z chmury...');
+    try {
+      const r = await fetch(CLOUD_URL + '?action=getAll');
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || 'unknown cloud error');
+      STATE.data = { wpisy: j.wpisy, templates: j.templates, plany: j.plany, meta: j.meta };
+      syncEnd();
+    } catch (e) {
+      syncEnd();
+      document.getElementById('app').innerHTML = `
+        <div class="loading">
+          Cloud fetch failed: ${e.message}<br><br>
+          Przełącz na Local w Ustawieniach albo sprawdź połączenie.
+        </div>
+      `;
+      return;
+    }
+    STATE.localEdits = { ...EMPTY_EDITS };
+  } else {
+    try {
+      const r = await fetch('dane.json');
+      if (!r.ok) throw new Error('fetch failed');
+      STATE.data = await r.json();
+    } catch (e) {
+      document.getElementById('app').innerHTML = `
+        <div class="loading">
+          Nie udało się wczytać <code>dane.json</code>.<br><br>
+          Jeśli otwierasz przez <code>file://</code> — Chrome blokuje fetch.<br>
+          Odpal lokalny serwer: <code>node serve.js</code> w folderze projektu<br>
+          i otwórz <code>http://localhost:XXXX</code>.
+        </div>
+      `;
+      return;
+    }
+    // Load local edits — serwer jest źródłem prawdy; localStorage tylko gdy serwer niedostępny
+    try {
+      const r = await fetch('/api/edits');
+      if (r.ok) {
+        const fromApi = await r.json();
+        STATE.localEdits = { ...EMPTY_EDITS, ...fromApi };
+        try { localStorage.setItem('localEdits', JSON.stringify(STATE.localEdits)); } catch {}
+      } else throw new Error('HTTP ' + r.status);
+    } catch (_) {
+      const saved = localStorage.getItem('localEdits');
+      if (saved) { try { STATE.localEdits = { ...EMPTY_EDITS, ...JSON.parse(saved) }; } catch {} }
+    }
+  }
+  // Load settings
+  ['bigText','hideAmounts'].forEach(k => {
+    const v = localStorage.getItem(k);
+    if (v !== null) STATE[k] = v === 'true';
+  });
+  const tm = localStorage.getItem('themeMode');
+  if (tm === 'auto' || tm === 'light' || tm === 'dark') STATE.themeMode = tm;
+  applyTheme();
+  // Czekaj na fonty — żeby animacja nie odpaliła się na fallback
+  if (document.fonts && document.fonts.ready) {
+    await document.fonts.ready;
+  }
+  document.body.classList.remove('fonts-loading');
+  render();
+}
+
+function saveLocal() {
+  // W cloud mode edycje sa ephemeralne (idą wprost do Sheets), nie persistujemy lokalnie
+  if (STATE.dataMode === 'cloud') return;
+  try { localStorage.setItem('localEdits', JSON.stringify(STATE.localEdits)); } catch {}
+}
+
+// ===== API helpers (server-side persistence — mirror Apps Script doPost shape) =====
+async function api(url, opts = {}) {
+  const isMutation = opts.method && opts.method !== 'GET';
+  if (STATE.dataMode === 'cloud' && isMutation) return cloudCall(url, opts);
+  try {
+    const r = await fetch(url, {
+      headers: { 'Content-Type': 'application/json' },
+      ...opts,
+    });
+    if (!r.ok) console.warn('API', url, 'HTTP', r.status);
+    return r;
+  } catch (e) { console.warn('API offline', url, e.message); }
+}
+
+// Routuje lokalne URL+method na Apps Script {action, token, ...}
+async function cloudCall(localUrl, opts) {
+  if (!STATE.cloudToken) {
+    toast('Brak tokenu — wpisz w Ustawieniach', 'err');
+    return;
+  }
+  const m = opts.method;
+  const body = opts.body ? JSON.parse(opts.body) : {};
+  let payload = { token: STATE.cloudToken };
+  let mm;
+  if ((mm = localUrl.match(/^\/api\/wpis\/(\d+)$/))) {
+    if (m === 'PATCH') payload = { ...payload, action: 'updateWpis', id: Number(mm[1]), patch: body };
+    else if (m === 'DELETE') payload = { ...payload, action: 'deleteWpis', id: Number(mm[1]) };
+  } else if (localUrl === '/api/wpis' && m === 'POST') {
+    payload = { ...payload, action: 'addWpis', wpis: body };
+  } else if ((mm = localUrl.match(/^\/api\/template\/(\d+)$/))) {
+    if (m === 'PATCH') payload = { ...payload, action: 'updateTemplate', id: Number(mm[1]), patch: body };
+    else if (m === 'DELETE') payload = { ...payload, action: 'deleteTemplate', id: Number(mm[1]) };
+  } else if (localUrl === '/api/template' && m === 'POST') {
+    payload = { ...payload, action: 'addTemplate', template: body };
+  } else {
+    toast('Cloud writeback: nieobsługiwane ' + m + ' ' + localUrl, 'err');
+    return;
+  }
+  syncStart('Zapis do chmury...');
+  try {
+    const r = await fetch(CLOUD_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // bypass CORS preflight
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) { toast('Cloud HTTP ' + r.status, 'err'); return; }
+    const j = await r.json();
+    if (!j.ok) { toast('Cloud: ' + (j.error || 'unknown'), 'err'); return; }
+    return r;
+  } catch (e) {
+    toast('Cloud error: ' + e.message, 'err');
+  } finally {
+    syncEnd();
+  }
+}
+const apiAddWpis        = (w)         => api('/api/wpis',           { method: 'POST',   body: JSON.stringify(w) });
+const apiPatchWpis      = (id, patch) => api('/api/wpis/' + id,     { method: 'PATCH',  body: JSON.stringify(patch) });
+const apiDeleteWpis     = (id)        => api('/api/wpis/' + id,     { method: 'DELETE' });
+const apiAddTemplate    = (t)         => api('/api/template',       { method: 'POST',   body: JSON.stringify(t) });
+const apiPatchTemplate  = (id, patch) => api('/api/template/' + id, { method: 'PATCH',  body: JSON.stringify(patch) });
+const apiDeleteTemplate = (id)        => api('/api/template/' + id, { method: 'DELETE' });
+const apiReset          = ()          => api('/api/reset',          { method: 'POST' });
+
+// ============== DATA QUERIES (nowy schema: wpisy + templates + plany) ==============
+function getAllWpisy() {
+  if (!STATE.data) return [];
+  const base = STATE.data.wpisy.map(w => ({ ...w, ...(STATE.localEdits.updated[w.id] || {}) }));
+  const visible = base.filter(w => !w.usuniety && !STATE.localEdits.deleted.includes(w.id));
+  return [...visible, ...STATE.localEdits.added];
+}
+
+function getMonthWpisy(yr = STATE.yr, mi = STATE.mi) {
+  return getAllWpisy().filter(w => w.rok === yr && w.miesiac === mi);
+}
+
+function getTemplate(id) {
+  if (!STATE.data || id == null) return null;
+  const localT = STATE.localEdits.templates && STATE.localEdits.templates[id];
+  let baseT = STATE.data.templates.find(t => t.id === id);
+  // Sprawdź też dodane lokalnie (z promote)
+  if (!baseT && STATE.localEdits.addedTemplates) {
+    baseT = STATE.localEdits.addedTemplates.find(t => t.id === id);
+  }
+  return baseT ? { ...baseT, ...(localT || {}) } : null;
+}
+
+// Szacunek dla wpisu: override per-mc → template → fallback do w.kwota
+function getSzacunek(w) {
+  if (w.kwota_szacunek_override != null) return w.kwota_szacunek_override;
+  const tpl = getTemplate(w.template_id);
+  return tpl ? tpl.kwota_szacunek : w.kwota;
+}
+
+function getStaleWpisy(yr = STATE.yr, mi = STATE.mi) {
+  return getMonthWpisy(yr, mi).filter(w => w.typ === 'stale');
+}
+
+// Aktywne monthly templates wydatki (base + addedTemplates) — do pokazania jako ghosty
+function getMonthlyTemplates() {
+  if (!STATE.data) return [];
+  const base = STATE.data.templates;
+  const added = STATE.localEdits.addedTemplates || [];
+  const patch = STATE.localEdits.templates || {};
+  return [...base, ...added]
+    .map(t => ({ ...t, ...(patch[t.id] || {}) }))
+    .filter(t => t.aktywny && t.freq === 'monthly' && t.kierunek === 'wydatek');
+}
+
+// Lista templates dla których NIE ma instancji w (yr, mi) — ghosty do materializacji
+function getMissingStaleTemplates(yr = STATE.yr, mi = STATE.mi) {
+  const existingTplIds = new Set(getStaleWpisy(yr, mi).map(w => w.template_id).filter(x => x != null));
+  return getMonthlyTemplates().filter(t => !existingTplIds.has(t.id));
+}
+
+// Granice nawigacji — najwcześniejszy i najpóźniejszy (rok,mies) z dane.json + lokalnych dodanych
+function getDataBounds() {
+  if (!STATE.data || !STATE.data.wpisy.length) return null;
+  const all = STATE.data.wpisy.concat(STATE.localEdits.added || []);
+  let min = Infinity, max = -Infinity;
+  all.forEach(w => {
+    const v = w.rok * 12 + w.miesiac;
+    if (v < min) min = v;
+    if (v > max) max = v;
+  });
+  return { min, max };
+}
+
+// canGoPrev: można cofać tylko do najwcześniejszego mc z danymi
+function canGoPrev() {
+  const b = getDataBounds(); if (!b) return true;
+  const newMi = STATE.mi - 1;
+  const newYr = newMi < 1 ? STATE.yr - 1 : STATE.yr;
+  const newMiAdj = newMi < 1 ? 12 : newMi;
+  return (newYr * 12 + newMiAdj) >= b.min;
+}
+
+// canGoNext: pozwala iść do mc z danymi + jeden pusty mc dalej (do materializacji). Nie więcej.
+function canGoNext() {
+  const b = getDataBounds(); if (!b) return false;
+  const newMi = STATE.mi + 1;
+  const newYr = newMi > 12 ? STATE.yr + 1 : STATE.yr;
+  const newMiAdj = newMi > 12 ? 1 : newMi;
+  return (newYr * 12 + newMiAdj) <= b.max + 1;
+}
+
+// Granice roku dla Timeline — bazujemy na latach z danymi (bez +1 buforu, bo Timeline = przegląd historyczny)
+function getYearBounds() {
+  if (!STATE.data || !STATE.data.wpisy.length) return null;
+  const all = STATE.data.wpisy.concat(STATE.localEdits.added || []);
+  let min = Infinity, max = -Infinity;
+  all.forEach(w => { if (w.rok < min) min = w.rok; if (w.rok > max) max = w.rok; });
+  return { min, max };
+}
+function canGoYearPrev() { const b = getYearBounds(); return !b || STATE.yr - 1 >= b.min; }
+function canGoYearNext() { const b = getYearBounds(); return !b || STATE.yr + 1 <= b.max; }
+
+// Materializacja: dla każdego monthly template bez wpisu (rok, mi) → utwórz wpis z kwota=0
+async function materializeMonth(yr = STATE.yr, mi = STATE.mi) {
+  if (STATE.dataMode === 'cloud') {
+    const allTemplates = [...STATE.data.templates, ...(STATE.localEdits.addedTemplates || [])];
+    const allWpisy = getAllWpisy();
+    const monthly = allTemplates.filter(t => t.aktywny && t.freq === 'monthly');
+    const toCreate = monthly.filter(t => !allWpisy.some(w => w.template_id === t.id && w.rok === yr && w.miesiac === mi));
+    if (toCreate.length === 0) { toast('Wszystkie Stałe już są dla tego miesiąca'); return 0; }
+    let id = nextWpisId();
+    const newWpisy = toCreate.map(t => ({
+      id: id++, typ: 'stale', kierunek: t.kierunek, rok: yr, miesiac: mi, data: '',
+      nazwa: t.nazwa, kategoria: t.kategoria, kwota: 0, kwota_partnera: 0,
+      dzielony: false, anomalia: false, template_id: t.id, opis: '', usuniety: false,
+    }));
+    STATE.localEdits.added.push(...newWpisy);
+    render(); // optimistic UI
+    syncStart('Tworzenie ' + newWpisy.length + ' Stałych...');
+    try {
+      const r = await fetch(CLOUD_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ token: STATE.cloudToken, action: 'bulkAddWpis', wpisy: newWpisy }),
+      });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || 'bulk failed');
+      toast('Utworzono ' + newWpisy.length + ' Stałych');
+    } catch (e) {
+      toast('Bulk error: ' + e.message + ' — rollback', 'err');
+      newWpisy.forEach(w => {
+        const i = STATE.localEdits.added.findIndex(x => x.id === w.id);
+        if (i >= 0) STATE.localEdits.added.splice(i, 1);
+      });
+      render();
+    } finally {
+      syncEnd();
+    }
+    return newWpisy.length;
+  }
+  try {
+    const r = await fetch('/api/materialize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rok: yr, miesiac: mi }),
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const out = await r.json();
+    const r2 = await fetch('/api/edits');
+    if (r2.ok) {
+      const fromApi = await r2.json();
+      STATE.localEdits = { added: [], updated: {}, deleted: [], templates: {}, addedTemplates: [], deletedTemplates: [], planOverrides: {}, paidRecurring: {}, ...fromApi };
+      saveLocal();
+    }
+    render();
+    return out.created;
+  } catch (e) { toast('Błąd materializacji: ' + e.message, 'err'); }
+}
+
+function nextWpisId() {
+  const allWpisy = getAllWpisy();
+  return Math.max(0, ...allWpisy.map(w => w.id), ...STATE.data.wpisy.map(w => w.id)) + 1;
+}
+
+// Materializacja JEDNEGO templatu (klik na ghost) + od razu otwórz lightbox edycji
+async function materializeOneTemplate(tpl, yr = STATE.yr, mi = STATE.mi) {
+  const nextId = nextWpisId();
+  const w = {
+    id: nextId,
+    typ: 'stale',
+    kierunek: tpl.kierunek,
+    rok: yr, miesiac: mi,
+    data: '',
+    nazwa: tpl.nazwa,
+    kategoria: tpl.kategoria,
+    kwota: 0, kwota_partnera: 0,
+    dzielony: false, anomalia: false,
+    template_id: tpl.id,
+    opis: '', usuniety: false,
+  };
+  STATE.localEdits.added.push(w);
+  saveLocal();
+  await apiAddWpis(w);
+  render();
+  openLightbox(w); // user może od razu wpisać kwotę
+}
+
+function getNadchodzaceWpisy(yr = STATE.yr) {
+  // Wszystkie nadchodzace dla roku, włącznie z miesiącami przeszłymi (history)
+  return getAllWpisy().filter(w => w.typ === 'nadchodzace' && w.rok === yr);
+}
+
+function getTransakcjeWpisy(yr = STATE.yr, mi = STATE.mi) {
+  return getMonthWpisy(yr, mi).filter(w => w.typ === 'transakcja');
+}
+
+function getAlerts(yr = STATE.yr, mi = STATE.mi, lookbackYears = 2) {
+  const yrs = [];
+  for (let i = 0; i <= lookbackYears; i++) yrs.push(yr - i);
+  return getAllWpisy()
+    .filter(w => w.typ === 'transakcja' && w.anomalia && w.miesiac === mi && yrs.includes(w.rok))
+    .sort((a, b) => (b.rok - a.rok) || (Math.abs(b.kwota) - Math.abs(a.kwota)));
+}
+
+function sumOut(yr = STATE.yr, mi = STATE.mi) {
+  return getMonthWpisy(yr, mi)
+    .filter(w => w.kierunek === 'wydatek')
+    .reduce((s, w) => s + w.kwota, 0);
+}
+
+function sumIn(yr = STATE.yr, mi = STATE.mi) {
+  return getMonthWpisy(yr, mi)
+    .filter(w => w.kierunek === 'przychod')
+    .reduce((s, w) => s + w.kwota, 0);
+}
+
+function sumCat(kat, yr = STATE.yr, mi = STATE.mi) {
+  return getMonthWpisy(yr, mi)
+    .filter(w => w.kategoria === kat && w.kierunek === 'wydatek')
+    .reduce((s, w) => s + w.kwota, 0);
+}
+
+function getPlan(kat, yr = STATE.yr, mi = STATE.mi) {
+  if (!STATE.data) return 0;
+  const override = STATE.localEdits.planOverrides?.[`${yr}_${kat}_${mi}`];
+  if (override != null) return override;
+  const row = STATE.data.plany.find(p => p.rok === yr && p.kategoria === kat);
+  return row ? row[ML[mi - 1]] || 0 : 0;
+}
+
+function planTotal(yr = STATE.yr, mi = STATE.mi) {
+  return CATS.reduce((s, k) => s + getPlan(k, yr, mi), 0);
+}
+
+// Helper: zaktualizuj wpis (lightbox save) — lokalnie + API
+function updateWpis(id, patch) {
+  // Jeśli wpis był dodany lokalnie (w added), modyfikuj tam
+  const addedIdx = STATE.localEdits.added.findIndex(w => w.id === id);
+  if (addedIdx !== -1) {
+    Object.assign(STATE.localEdits.added[addedIdx], patch);
+  } else {
+    if (!STATE.localEdits.updated[id]) STATE.localEdits.updated[id] = {};
+    Object.assign(STATE.localEdits.updated[id], patch);
+  }
+  saveLocal();
+  apiPatchWpis(id, patch);
+}
+
+// Helper: soft-delete — usuń z added lub dodaj do deleted, plus API
+function deleteWpis(id) {
+  const addedIdx = STATE.localEdits.added.findIndex(w => w.id === id);
+  if (addedIdx !== -1) {
+    STATE.localEdits.added.splice(addedIdx, 1);
+  } else if (!STATE.localEdits.deleted.includes(id)) {
+    STATE.localEdits.deleted.push(id);
+  }
+  saveLocal();
+  apiDeleteWpis(id);
+}
+
+// Helper: aktualizuj template (zmiana "od teraz na stałe")
+function updateTemplate(id, patch) {
+  if (!STATE.localEdits.templates) STATE.localEdits.templates = {};
+  if (!STATE.localEdits.templates[id]) STATE.localEdits.templates[id] = {};
+  Object.assign(STATE.localEdits.templates[id], patch);
+  saveLocal();
+  apiPatchTemplate(id, patch);
+}
+
+// ============== VIEWS ==============
+function renderHome() {
+  // Empty state — miesiąc bez żadnych wpisów (fallback; normalnie niedostępny przez nav, tylko jeśli user trafi inaczej)
+  const monthWpisy = getMonthWpisy();
+  if (monthWpisy.length === 0) {
+    const ghostsCount = getMissingStaleTemplates().length;
+    return el('div', { style: 'padding:120px 32px 40px;text-align:center;min-height:60vh;display:flex;flex-direction:column;justify-content:center;align-items:center' }, [
+      el('div', { class: 'big-h', style: 'font-size:64px;line-height:1;color:var(--border);margin-bottom:18px' }, [ML_FULL[STATE.mi - 1]]),
+      el('div', { style: 'font-size:14px;color:var(--muted);margin-bottom:6px' }, [`${STATE.yr}`]),
+      el('div', { style: 'font-size:13px;color:var(--muted-2);margin-bottom:42px;max-width:280px' }, [
+        `Brak danych dla tego miesiąca. Kliknij aby dodać ${ghostsCount} Stał${ghostsCount === 1 ? 'y' : 'ych'} wydatk${ghostsCount === 1 ? '' : 'ów'} z templates.`,
+      ]),
+      el('button', {
+        class: 'big-cta',
+        onclick: () => materializeMonth(),
+      }, [`+ Dodaj miesiąc ${ML_FULL[STATE.mi - 1]} ${String(STATE.yr).slice(2)}`]),
+    ]);
+  }
+
+  const out = sumOut();
+  const income = sumIn();
+  const free = income - out;
+  const pct = income > 0 ? Math.round((out / income) * 100) : 0;
+
+  const stale = getStaleWpisy().filter(w => w.kierunek === 'wydatek');
+  const naduch = getNadchodzaceWpisy().filter(w => w.miesiac === STATE.mi);
+  const alerts = getAlerts().slice(0, 6);
+
+  const renderTile = (w) => {
+    const tpl = getTemplate(w.template_id);
+    const szacunek = getSzacunek(w);
+    const paid = w.kwota > 0;
+    return el('div', {
+      class: 'mini-tile ' + (paid ? 'paid' : 'unpaid'),
+      onclick: () => openLightbox(w),
+    }, [
+      el('div', { class: 'n' }, [tpl ? tpl.nazwa : w.nazwa]),
+      el('div', { class: 'a' }, [
+        fmtAmt(w.kwota),
+        el('span', { class: 'planned' }, [`/${fmt(szacunek)}`]),
+      ]),
+    ]);
+  };
+
+  const renderAlertTile = (w) => el('div', {
+    class: 'mini-tile anom',
+    onclick: () => openTimelineDetail({ ...w, kind: 'alert', srcYr: w.rok }),
+    style: 'cursor:pointer',
+  }, [
+    el('div', { class: 'n' }, [
+      el('span', { style: 'color:var(--muted);font-weight:800;margin-right:4px' }, [`'${String(w.rok).slice(2)}`]),
+      w.nazwa,
+    ]),
+    el('div', { class: 'a' }, [fmtAmt(Math.abs(w.kwota))]),
+  ]);
+
+  const addBtn = (tryb) => el('button', {
+    class: 'sec-add',
+    onclick: () => openAddModal(tryb),
+    title: 'Dodaj nowy ' + tryb,
+  }, ['+']);
+
+  const sections = [];
+
+  // Hero: wolny budżet
+  sections.push(el('div', { style: 'padding:48px 24px 0' }, [
+    el('div', { class: 'caps-i hero-anim', style: 'margin-bottom:14px' }, ['Wolny budżet']),
+    el('div', { class: 'anton num hero-anim', style: `font-size:88px;line-height:1;letter-spacing:-3px;color:${free < 0 ? 'var(--danger)' : 'var(--fg)'}` },
+      [(free < 0 ? '−' : '') + fmtAmt(free)]),
+    el('div', { class: 'hero-anim', style: 'height:4px;background:var(--surface-3);margin-top:18px' }, [
+      el('div', { style: `height:100%;width:${Math.max(0, 100 - pct)}%;background:${pct >= 100 ? '#c00' : '#000'}` }),
+    ]),
+    el('div', { class: 'hero-anim', style: 'display:flex;justify-content:space-between;margin-top:12px;gap:14px' }, [
+      el('div', {}, [
+        el('div', { class: 'caps-i', style: 'font-size:8px;margin-bottom:3px' }, ['Wydane']),
+        el('div', { style: 'font-size:13px;color:var(--muted);font-weight:600' }, [`${fmtAmt(out)} / ${pct}%`]),
+      ]),
+      el('div', { style: 'text-align:right' }, [
+        el('div', { class: 'caps-i', style: 'font-size:8px;margin-bottom:3px' }, ['Przychody']),
+        el('div', { style: 'font-size:13px;color:var(--muted);font-weight:600' }, [fmtAmt(income)]),
+      ]),
+    ]),
+  ]));
+
+  // Sekcja Stałe — wpisy z Wpisy + brakujące templates jako ghosty (k=0, klik = utwórz wpis k=0)
+  if (stale.length) {
+    const ghosts = getMissingStaleTemplates();
+    const paid = stale.filter(w => w.kwota > 0).length;
+    const total = stale.length + ghosts.length; // wszystkie monthly templates
+    const staleSorted = stale.slice().sort((a, b) => {
+      const ap = a.kwota > 0 ? 1 : 0;
+      const bp = b.kwota > 0 ? 1 : 0;
+      if (ap !== bp) return ap - bp;
+      return (a.nazwa || '').localeCompare(b.nazwa || '');
+    });
+    const renderGhost = (tpl) => el('div', {
+      class: 'mini-tile unpaid',
+      onclick: () => materializeOneTemplate(tpl),
+      title: `"${tpl.nazwa}" brakuje w tym mc — klik utworzy wpis (k=0)`,
+    }, [
+      el('div', { class: 'n' }, [tpl.nazwa]),
+      el('div', { class: 'a' }, [
+        fmtAmt(0),
+        el('span', { class: 'planned' }, [`/${fmt(tpl.kwota_szacunek)}`]),
+      ]),
+    ]);
+    const addTile = el('div', {
+      class: 'mini-tile add-tile',
+      onclick: () => openAddModal('stale', true),
+      title: 'Dodaj nowy Stały template + wpis dla tego miesiąca',
+    }, ['+']);
+    // Kolejność: niezapł realne + ghosty (wszystko k=0) na górze, zapłacone na dole, addTile na końcu
+    const unpaidReal = staleSorted.filter(w => w.kwota === 0);
+    const paidReal = staleSorted.filter(w => w.kwota > 0);
+    sections.push(el('div', { style: 'padding:42px 24px 0' }, [
+      el('div', { class: 'hero-anim', style: 'display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px' }, [
+        el('div', { class: 'caps-i' }, [`Stałe · ${ML_FULL[STATE.mi - 1]}`]),
+        el('div', { class: 'caps-i num', style: 'font-size:10px;color:var(--success)' }, [`${paid}/${total} zapł`]),
+      ]),
+      el('div', { class: 'mini-grid' }, [
+        ...unpaidReal.map(renderTile),
+        ...ghosts.map(renderGhost),
+        ...paidReal.map(renderTile),
+        addTile,
+      ]),
+    ]));
+  }
+
+  // Sekcja Nadchodzące — zawsze widoczna (żeby było gdzie dodać pierwszy wpis)
+  {
+    const naduchSorted = naduch.slice().sort((a, b) => {
+      const ap = a.kwota > 0 ? 1 : 0;
+      const bp = b.kwota > 0 ? 1 : 0;
+      if (ap !== bp) return ap - bp;
+      return (a.miesiac - b.miesiac) || (a.nazwa || '').localeCompare(b.nazwa || '');
+    });
+    const addTileN = el('div', {
+      class: 'mini-tile add-tile',
+      onclick: () => openAddModal('nadchodzace', true),
+      title: 'Dodaj nowy Nadchodzący',
+    }, ['+']);
+    sections.push(el('div', { style: 'padding:42px 24px 0' }, [
+      el('div', { class: 'hero-anim', style: 'margin-bottom:14px' }, [
+        el('div', { class: 'caps-i' }, [`Nadchodzące · ${STATE.yr}`]),
+      ]),
+      el('div', { class: 'mini-grid' }, [...naduchSorted.map(renderTile), addTileN]),
+    ]));
+  }
+
+  // Sekcja Alerty (historia 2 lat)
+  if (alerts.length) {
+    sections.push(el('div', { style: 'padding:42px 24px 0' }, [
+      el('div', { class: 'caps-i hero-anim', style: 'margin-bottom:14px' }, [`Alerty · ${ML_FULL[STATE.mi - 1]} (2 lata wstecz)`]),
+      el('div', { class: 'mini-grid' }, alerts.map(renderAlertTile)),
+    ]));
+  }
+
+  return el('div', {}, sections);
+}
+
+function renderPlan() {
+  const sum = sumOut();
+  const planSum = planTotal();
+  const pctTotal = planSum > 0 ? Math.round((sum / planSum) * 100) : 0;
+
+  return el('div', {}, [
+    el('div', { style: 'padding:22px 24px 18px' }, [el('div', { class: 'big-h' }, ['Plan'])]),
+    el('div', { style: 'padding:0 24px' }, [
+      ...CATS.map(k => planRow(k)),
+      el('div', { class: 'pr-sum' }, [
+        el('div', {}, [
+          el('div', { class: 'l' }, ['Suma wydatków']),
+          el('div', { class: 'l-sub' }, [`z planu ${fmt(planSum)} · ${pctTotal}%`]),
+        ]),
+        el('div', { class: 'v num' }, [fmtAmt(sum)]),
+      ]),
+    ]),
+  ]);
+}
+
+// ============== PLAN EDIT (lightbox) ==============
+let planEditState = null;
+
+function openPlanEdit() {
+  const values = {};
+  CATS.forEach(k => values[k] = getPlan(k));
+  const target = Object.values(values).reduce((s, v) => s + v, 0);
+  planEditState = { yr: STATE.yr, mi: STATE.mi, values, target };
+  $('#plan-edit-title').textContent = 'Plan';
+  renderPlanEditBody();
+  showSheet('plan-edit-sheet');
+}
+
+function renderPlanEditBody() {
+  const body = $('#plan-edit-body');
+  const foot = $('#plan-edit-foot');
+  body.innerHTML = '';
+  foot.innerHTML = '';
+  const STEP = 50;
+
+  const adjust = (kat, delta) => {
+    planEditState.values[kat] = Math.max(0, (planEditState.values[kat] || 0) + delta);
+    renderPlanEditBody();
+  };
+
+  const tile = (kat) => el('div', { class: 'plan-tile' }, [
+    el('div', { class: 'plan-tile-n' }, [kat.split(' ')[0]]),
+    el('div', { class: 'plan-tile-amt' }, [
+      el('button', { class: 'plan-tile-btn', onclick: () => adjust(kat, -STEP) }, ['−']),
+      el('input', {
+        type: 'number', inputmode: 'numeric',
+        value: planEditState.values[kat] || 0,
+        oninput: (e) => { planEditState.values[kat] = Number(e.target.value) || 0; updateSumDisplay(); },
+        class: 'plan-tile-input',
+      }),
+      el('button', { class: 'plan-tile-btn', onclick: () => adjust(kat, STEP) }, ['+']),
+    ]),
+  ]);
+
+  body.appendChild(el('div', { class: 'plan-grid' }, CATS.map(tile)));
+
+  // Suma + target
+  const sumDiv = el('div', { class: 'plan-sum' }, [
+    el('div', { style: 'flex:1' }, [
+      el('div', { class: 'caps-i', style: 'margin-bottom:4px' }, ['Suma kategorii']),
+      el('div', { id: 'plan-sum-actual', class: 'anton num', style: 'font-size:24px;line-height:1' }, [fmt(getPlanEditSum())]),
+    ]),
+    el('div', { style: 'flex:1;text-align:right' }, [
+      el('div', { class: 'caps-i', style: 'margin-bottom:4px' }, ['Cel (budżet)']),
+      el('input', {
+        type: 'number', inputmode: 'numeric', id: 'plan-target-input',
+        value: planEditState.target,
+        oninput: (e) => { planEditState.target = Number(e.target.value) || 0; updateSumDisplay(); },
+        class: 'plan-target-input',
+      }),
+    ]),
+  ]);
+  body.appendChild(sumDiv);
+  body.appendChild(el('div', { id: 'plan-mismatch', style: 'margin-top:10px;text-align:center;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--danger-2);display:none' }, ['']));
+
+  // Foot — bez border-radius, kwadratowe
+  foot.appendChild(el('div', { style: 'display:flex;gap:8px' }, [
+    el('button', {
+      id: 'plan-save-one', class: 'plan-save',
+      style: 'flex:1;padding:16px;background:var(--card);border:1px solid var(--fg);color:var(--fg);cursor:pointer;font-family:inherit;font-weight:700;font-size:13px;letter-spacing:0.5px;border-radius:8px',
+      onclick: () => savePlanEdit('this'),
+    }, ['Bieżący miesiąc']),
+    el('button', {
+      id: 'plan-save-all', class: 'plan-save',
+      style: 'flex:1;padding:16px;background:var(--accent);border:none;color:var(--accent-fg);cursor:pointer;font-family:inherit;font-weight:800;font-size:13px;letter-spacing:0.5px;border-radius:8px',
+      onclick: () => savePlanEdit('all'),
+    }, ['Na stałe']),
+  ]));
+
+  updateSumDisplay();
+}
+
+function getPlanEditSum() {
+  return Object.values(planEditState.values).reduce((s, v) => s + (v || 0), 0);
+}
+
+function updateSumDisplay() {
+  const actual = getPlanEditSum();
+  const target = planEditState.target;
+  const sumEl = $('#plan-sum-actual');
+  const msg = $('#plan-mismatch');
+  const oneBtn = $('#plan-save-one');
+  const allBtn = $('#plan-save-all');
+  if (!sumEl) return;
+  sumEl.textContent = fmt(actual);
+  const diff = actual - target;
+  if (Math.abs(diff) > 0.01) {
+    sumEl.style.color = '#ef4444';
+    msg.style.display = 'block';
+    msg.textContent = diff > 0 ? `Przekraczasz cel o ${fmt(diff)}` : `Brakuje ${fmt(-diff)} do celu`;
+    [oneBtn, allBtn].forEach(b => { if (b) { b.disabled = true; b.style.opacity = '0.4'; b.style.cursor = 'not-allowed'; } });
+  } else {
+    sumEl.style.color = '#10b981';
+    msg.style.display = 'none';
+    [oneBtn, allBtn].forEach(b => { if (b) { b.disabled = false; b.style.opacity = '1'; b.style.cursor = 'pointer'; } });
+  }
+}
+
+function savePlanEdit(scope) {
+  if (!planEditState) return;
+  if (!STATE.localEdits.planOverrides) STATE.localEdits.planOverrides = {};
+  const { yr, mi, values } = planEditState;
+  if (scope === 'this') {
+    CATS.forEach(k => { STATE.localEdits.planOverrides[`${yr}_${k}_${mi}`] = values[k]; });
+    toast(`Zaktualizowano plan na ${ML_FULL[mi - 1]} ${yr}`);
+  } else {
+    for (let m = 1; m <= 12; m++) {
+      CATS.forEach(k => { STATE.localEdits.planOverrides[`${yr}_${k}_${m}`] = values[k]; });
+    }
+    toast(`Zaktualizowano plan na stałe (${yr})`);
+  }
+  saveLocal();
+  closeSheet();
+  render();
+}
+
+function planRow(kat) {
+  const actual = sumCat(kat);
+  const plan = getPlan(kat);
+  const pct = plan > 0 ? Math.round((actual / plan) * 100) : 0;
+  const empty = actual === 0 && plan === 0;
+  const cls = 'pr' + (empty ? ' empty' : '') + (pct >= 100 ? ' over' : pct >= 80 ? ' warn' : '');
+  return el('div', { class: cls, onclick: () => openPlanEdit() }, [
+    el('div', { class: 'name' }, [
+      el('span', { class: 'icon', html: `<svg viewBox="0 0 24 24">${catIcon(kat)}</svg>` }),
+      kat,
+    ]),
+    el('div', { class: 'val' }, [
+      el('span', { class: 'a num' }, [actual > 0 ? fmtAmt(actual) : '—']),
+      el('span', { class: 'b num' }, [`/ ${plan > 0 ? fmt(plan) : '0'}`]),
+    ]),
+    el('div', { class: 'bar' }, [el('div', { style: `width:${Math.min(100, pct)}%` })]),
+  ]);
+}
+
+function ichip(txt, iconSvg, active, onclick, variant = '') {
+  return el('span', {
+    class: 'ichip ' + (active ? 'active ' + variant : ''),
+    onclick,
+  }, [
+    el('span', { class: 'ic', html: `<svg viewBox="0 0 24 24">${iconSvg}</svg>` }),
+    el('span', { class: 'txt' }, [txt]),
+  ]);
+}
+
+function renderTrans() {
+  const isUnpaid = STATE.filter === '__unpaid';
+  let wpisy = getMonthWpisy();
+
+  if (isUnpaid) {
+    wpisy = wpisy.filter(w => w.kwota === 0);
+  } else {
+    if (STATE.filter) {
+      wpisy = wpisy.filter(w => w.kategoria === STATE.filter);
+    }
+    // Domyślnie ukryj kwota=0 (placeholdery)
+    wpisy = wpisy.filter(w => w.kwota !== 0);
+  }
+
+  // Sort: stale → nadchodzace → transakcja, w obrębie typu po kwocie malejąco
+  const typOrder = { stale: 0, nadchodzace: 1, transakcja: 2 };
+  wpisy.sort((a, b) => (typOrder[a.typ] - typOrder[b.typ]) || (Math.abs(b.kwota) - Math.abs(a.kwota)));
+
+  const sumOut2 = wpisy.filter(w => w.kierunek === 'wydatek').reduce((s,w) => s + Math.abs(w.kwota), 0);
+  const sumIn2 = wpisy.filter(w => w.kierunek === 'przychod').reduce((s,w) => s + Math.abs(w.kwota), 0);
+
+  const addTile = el('div', {
+    class: 'trans-add-tile',
+    onclick: () => openAddModal('transakcja'),
+    title: 'Dodaj nową transakcję',
+  }, [
+    el('span', { style: 'font-family:Anton;font-size:28px;line-height:1;color:var(--muted-2)' }, ['+']),
+    el('span', { style: 'font-size:13px;font-weight:500;letter-spacing:0.3px;color:var(--muted-2)' }, ['Dodaj transakcję']),
+  ]);
+
+  return el('div', {}, [
+    el('div', { style: 'padding:22px 24px 0' }, [el('div', { class: 'big-h' }, ['Transakcje'])]),
+    el('div', { style: 'padding:28px 24px 0' }, [
+      el('div', { class: 'ichips-wrap' }, (() => {
+        const showAll = STATE.transShowAll;
+        const restCats = CATS.filter(k => k !== 'Firma' && k !== 'Nela');
+        const chips = [
+          ichip('Wszystkie', '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/>', !STATE.filter, () => { STATE.filter = null; render(); }),
+          ichip('Niezapł.', '<path d="M7 4h10M7 20h10M8 5l8 14M16 5L8 19"/>', isUnpaid, () => { STATE.filter = isUnpaid ? null : '__unpaid'; render(); }, 'ylw'),
+          ichip('Firma', catIcon('Firma'), STATE.filter === 'Firma', () => { STATE.filter = STATE.filter === 'Firma' ? null : 'Firma'; render(); }),
+          ichip('Nela', catIcon('Nela'), STATE.filter === 'Nela', () => { STATE.filter = STATE.filter === 'Nela' ? null : 'Nela'; render(); }),
+        ];
+        if (showAll) {
+          restCats.forEach(k => chips.push(ichip(k.split(' ')[0], catIcon(k), STATE.filter === k, () => { STATE.filter = STATE.filter === k ? null : k; render(); })));
+          chips.push(ichip('Mniej', '<path d="M18 15l-6-6-6 6"/>', false, () => { STATE.transShowAll = false; render(); }));
+        } else {
+          chips.push(ichip('Więcej', '<circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/>', false, () => { STATE.transShowAll = true; render(); }));
+        }
+        return chips;
+      })()),
+    ]),
+    el('div', { style: 'padding:14px 24px 0' }, [
+      addTile,
+      ...(wpisy.length ? wpisy.map(txRow) : [el('div', { style: 'padding:24px 0;text-align:center;color:var(--muted);font-size:13px' }, [isUnpaid ? 'Brak placeholderów' : 'Brak transakcji'])]),
+      wpisy.length ? el('div', { class: 'pr-sum' }, [
+        el('div', {}, [
+          el('div', { class: 'l' }, ['Suma']),
+          el('div', { class: 'l-sub' }, [sumIn2 > 0 ? `+ ${fmt(sumIn2)} przych. · ${wpisy.length} poz.` : `${wpisy.length} pozycji`]),
+        ]),
+        el('div', { class: 'v num' }, [`− ${fmtAmt(sumOut2)}`]),
+      ]) : null,
+    ]),
+  ]);
+}
+
+function txRow(w) {
+  const isIn = w.kierunek === 'przychod';
+  const anom = w.anomalia === true;
+  const heart = w.dzielony === true;
+  const badges = [];
+  if (anom) badges.push(el('span', { class: 'tag anom', title: 'Alert — duży jednorazowy wydatek' }, ['★ Alert']));
+  if (heart) badges.push(el('span', { class: 'tag heart', title: 'Wspólny wydatek — udział partnera' }, [w.kwota_partnera ? `♥ ${fmt(w.kwota_partnera)}` : '♥']));
+  // Typ badge dla Stałych/Nadchodzących
+  if (w.typ === 'stale') badges.push(el('span', { class: 'tag stale-tag', title: 'Stały co miesiąc' }, ['STAŁY']));
+  if (w.typ === 'nadchodzace') badges.push(el('span', { class: 'tag nadch-tag', title: 'Nadchodzący' }, ['NADCH']));
+  return el('div', { class: 'tx-row', onclick: () => openLightbox(w) }, [
+    el('div', { class: 'left' }, [
+      el('div', { class: 'ic-cat', html: `<svg viewBox="0 0 24 24">${catIcon(w.kategoria)}</svg>` }),
+      el('div', { class: 'info' }, [
+        el('div', { class: 'name' }, [w.nazwa]),
+        el('div', { class: 'meta' }, [w.kategoria]),
+      ]),
+    ]),
+    el('div', { class: 'right' }, [
+      badges.length ? el('div', { class: 'badges' }, badges) : null,
+      el('div', { class: 'v num' }, [`${isIn ? '+' : '−'} ${fmtAmt(w.kwota)}`]),
+    ]),
+  ]);
+}
+
+function renderCharts() {
+  const cat = STATE.chartCat;
+  // Zakres miesięcy wg STATE.chartZakres
+  const monthsCount = { '0.5': 6, '1': 12, '2': 24, 'all': null }[STATE.chartZakres] || 12;
+  let N;
+  if (monthsCount === null) {
+    const bounds = getDataBounds();
+    if (bounds) {
+      const cur = STATE.yr * 12 + STATE.mi;
+      N = Math.max(1, cur - bounds.min + 1);
+    } else { N = 12; }
+  } else { N = monthsCount; }
+  const points = [];
+  const now = new Date(STATE.yr, STATE.mi - 1, 1);
+  for (let i = N - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    points.push({
+      yr: d.getFullYear(),
+      mi: d.getMonth() + 1,
+      val: sumCat(cat, d.getFullYear(), d.getMonth() + 1),
+    });
+  }
+  const max = Math.max(...points.map(p => p.val), 100);
+  const yMax = Math.ceil(max / 1000) * 1000;
+  const w = 360, h = 260, padL = 56, padB = 18, padT = 8;
+  const xStep = points.length > 1 ? (w - padL) / (points.length - 1) : 0;
+  const yOf = v => padT + (h - padT - padB) * (1 - v / yMax);
+  const path = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${padL + i * xStep},${yOf(p.val)}`).join(' ');
+  const area = `${path} L${padL + (points.length - 1) * xStep},${h - padB} L${padL},${h - padB} Z`;
+  const last = points[points.length - 1];
+
+  const yTicks = [yMax, yMax * 0.75, yMax * 0.5, yMax * 0.25];
+  // X-ticks adaptacyjne: 5 etykiet dla krótkich, 7 dla dłuższych
+  const maxTicks = points.length > 15 ? 7 : 5;
+  const tickStep = Math.max(1, Math.ceil(points.length / maxTicks));
+  const xTickIdx = [];
+  for (let i = 0; i < points.length; i += tickStep) xTickIdx.push(i);
+  if (xTickIdx[xTickIdx.length - 1] !== points.length - 1) xTickIdx.push(points.length - 1);
+  // Range label
+  const firstP = points[0], lastP = points[points.length - 1];
+  const rangeLabel = `${ML[firstP.mi - 1]} '${String(firstP.yr).slice(2)} → ${ML[lastP.mi - 1]} '${String(lastP.yr).slice(2)} · ${points.length} mc`;
+
+  // Tooltip cache
+  window.__chartState = { points, padL, xStep, yOf, h, padB, fmt };
+
+  const smChip = (label, val) => el('span', {
+    class: 'chip sm ' + (STATE.chartZakres === val ? 'active' : ''),
+    onclick: () => { STATE.chartZakres = val; render(); },
+  }, [label]);
+
+  return el('div', { class: 'charts-page' }, [
+    el('div', { style: 'padding:22px 24px 14px' }, [
+      el('div', { class: 'big-h' }, ['Wykresy']),
+    ]),
+    el('div', { style: 'padding:0 24px 6px;display:flex;align-items:center;gap:6px;flex-wrap:nowrap;justify-content:space-between' }, [
+      smChip('pół roku', '0.5'),
+      smChip('rok', '1'),
+      smChip('2 lata', '2'),
+      smChip('całość', 'all'),
+    ]),
+    el('div', { style: 'padding:0 24px 12px;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;color:var(--muted)' }, [rangeLabel]),
+    el('div', { style: 'padding:0 24px 0' }, [
+      el('div', { class: 'ichips-wrap' }, CATS.map(k =>
+        ichip(k.split(' ')[0], catIcon(k), STATE.chartCat === k, () => { STATE.chartCat = k; render(); })
+      )),
+    ]),
+    el('div', { class: 'charts-dock', html: `
+      <svg id="chart-svg" viewBox="0 0 ${w} ${h + 4}" width="100%" style="display:block;touch-action:none">
+        <defs><linearGradient id="g" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#FFE600" stop-opacity="0.7"/><stop offset="100%" stop-color="#FFE600" stop-opacity="0"/></linearGradient></defs>
+        ${yTicks.map((v, i) => `<text class="chart-grid" style="--d:${100 + i * 80}ms;fill:var(--muted-4)" x="0" y="${yOf(v) + 3}" font-size="9" font-family="Inter" font-weight="600">${fmt(Math.round(v))} zł</text><line class="chart-grid" style="--d:${100 + i * 80}ms;stroke:var(--surface-3)" x1="${padL}" y1="${yOf(v)}" x2="${w}" y2="${yOf(v)}" stroke-width="1"/>`).join('')}
+        <path class="chart-area" d="${area}" fill="url(#g)"/>
+        <path class="chart-line" d="${path}" stroke="#FFE600" stroke-width="2.5" fill="none"/>
+        <circle class="chart-dot" cx="${padL + (points.length - 1) * xStep}" cy="${yOf(last.val)}" r="4" style="fill:var(--fg)"/>
+        ${xTickIdx.map((i, j) => `<text class="chart-xtick" style="--d:${400 + j * 80}ms;fill:var(--muted)" x="${padL + i * xStep}" y="${h + 14}" font-size="8" font-family="Inter" font-weight="600">${ML[points[i].mi - 1].toUpperCase()}${points.length > 12 ? ` '${String(points[i].yr).slice(2)}` : ''}</text>`).join('')}
+        <g id="chart-tip" style="display:none;pointer-events:none">
+          <line x1="0" y1="${padT}" x2="0" y2="${h - padB}" style="stroke:var(--fg)" stroke-width="0.6" stroke-dasharray="2 2" opacity="0.35"/>
+          <circle cx="0" cy="0" r="5" style="fill:var(--fg)"/>
+          <text x="0" y="0" font-family="Anton" font-size="15" style="fill:var(--fg)" text-anchor="middle" letter-spacing="-0.4">0</text>
+        </g>
+        <rect x="${padL}" y="0" width="${w - padL}" height="${h}" fill="transparent" style="cursor:crosshair"
+          onpointermove="chartTipMove(event)" onpointerdown="chartTipMove(event)" onpointerleave="chartTipHide()"/>
+      </svg>
+    ` }),
+  ]);
+}
+
+function chartTipMove(e) {
+  const s = window.__chartState; if (!s) return;
+  const svg = document.getElementById('chart-svg'); if (!svg) return;
+  const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+  const local = pt.matrixTransform(svg.getScreenCTM().inverse());
+  let i = Math.round((local.x - s.padL) / s.xStep);
+  i = Math.max(0, Math.min(s.points.length - 1, i));
+  const p = s.points[i];
+  const x = s.padL + i * s.xStep;
+  const y = s.yOf(p.val);
+  const tip = svg.querySelector('#chart-tip');
+  tip.style.display = '';
+  const line = tip.querySelector('line');
+  line.setAttribute('x1', x); line.setAttribute('x2', x);
+  const dot = tip.querySelector('circle');
+  dot.setAttribute('cx', x); dot.setAttribute('cy', y);
+  const txt = tip.querySelector('text');
+  txt.setAttribute('x', x);
+  txt.setAttribute('y', Math.max(y - 10, 14));
+  txt.textContent = s.fmt(Math.round(p.val));
+}
+function chartTipHide() {
+  const tip = document.querySelector('#chart-tip');
+  if (tip) tip.style.display = 'none';
+}
+
+// Timeline: read-only podgląd z opcją usunięcia z alertów (zamiast pełnego edit lightbox)
+async function openTimelineDetail(e) {
+  const isAlert = e.kind === 'alert';
+  const paid = e.kind === 'nadchodzace' && e.kwota > 0;
+  const amt = paid ? e.kwota : (e.szacunek != null ? e.szacunek : Math.abs(e.kwota));
+  const kindLabel = e.kind === 'nadchodzace' ? (paid ? 'Nadchodzący · zapłacony' : 'Nadchodzący') : 'Alert (anomalia)';
+  const message = `${kindLabel}\nKategoria: ${e.kategoria}\nKwota: ${fmt(amt)} PLN\nMiesiąc: ${ML_FULL[e.miesiac - 1]} ${e.rok}`;
+  const buttons = [];
+  if (isAlert) buttons.push({ label: 'Usuń z alertów ★', value: 'unanom', style: 'danger' });
+  buttons.push({ label: 'Zamknij', value: null, style: 'cancel' });
+  const action = await dialog({ title: e.nazwa, message, buttons });
+  if (action === 'unanom') {
+    updateWpis(e.id, { anomalia: false });
+    render();
+    toast('Usunięto z alertów');
+  }
+}
+
+// Timeline: 3-kolumnowy sliding window kafelków wokół (STATE.yr, STATE.mi), stackowany przez lata (zakres)
+function renderTimeline() {
+  const today = new Date();
+  const todayYr = today.getFullYear();
+  const todayMi = today.getMonth(); // 0-11
+
+  const N = { '3mc': 3, '6mc': 6, 'rok': 12 }[STATE.tlBucket] || 3;
+  const halfBefore = Math.floor((N - 1) / 2);
+  // Komórki: sliding window wokół (STATE.yr, STATE.mi). i=0 = bieżący, -1 = wstecz, +1 = w przód.
+  const cells = [];
+  for (let i = -halfBefore; i < N - halfBefore; i++) {
+    const idx = STATE.yr * 12 + STATE.mi + i;
+    const yr = Math.floor((idx - 1) / 12);
+    const mi = ((idx - 1) % 12) + 1;
+    const isCurr = yr === STATE.yr && mi === STATE.mi;
+    cells.push({ yr, mi, isCurr, label: ML[mi - 1] });
+  }
+
+  // Lata w zakresie — relatywnie do roku komórki
+  const yrsBack = STATE.tlZakres === 'all' ? 99 : Number(STATE.tlZakres);
+  const bounds = getYearBounds();
+  const minYr = bounds ? bounds.min : -Infinity;
+
+  // Eventy per komórka — stack lat dla danego miesiąca cell.mi
+  const eventsByCell = cells.map(cell => {
+    const startYr = Math.max(minYr, cell.yr - yrsBack + 1);
+    const evs = [];
+    for (let yr = startYr; yr <= cell.yr; yr++) {
+      const naduch = getNadchodzaceWpisy(yr).filter(w => w.miesiac === cell.mi);
+      const alerts = getAllWpisy().filter(w => w.rok === yr && w.miesiac === cell.mi && w.typ === 'transakcja' && w.anomalia);
+      naduch.forEach(w => {
+        if (STATE.tlHiddenCats[w.kategoria]) return;
+        evs.push({ ...w, kind: 'nadchodzace', szacunek: getSzacunek(w), srcYr: yr });
+      });
+      alerts.forEach(w => {
+        if (STATE.tlHiddenCats[w.kategoria]) return;
+        evs.push({ ...w, kind: 'alert', srcYr: yr });
+      });
+    }
+    evs.sort((a, b) => (a.srcYr - b.srcYr) || (a.kind === b.kind ? Math.abs(b.kwota) - Math.abs(a.kwota) : a.kind === 'nadchodzace' ? -1 : 1));
+    return evs;
+  });
+
+  // Render kafelka — wszystkie zielone jak .mini-tile.paid w Home
+  const renderTile = (e) => {
+    const isNaduch = e.kind === 'nadchodzace';
+    const paid = isNaduch && e.kwota > 0;
+    const amt = paid ? e.kwota : Math.abs(e.szacunek || e.kwota);
+    return el('div', {
+      class: 'mini-tile paid',
+      style: 'margin-bottom:4px;cursor:pointer',
+      onclick: () => openTimelineDetail(e),
+    }, [
+      el('div', { class: 'n' }, [
+        el('span', { style: 'color:var(--muted-4);font-weight:700;margin-right:3px' }, [`'${String(e.srcYr).slice(2)}`]),
+        e.nazwa,
+      ]),
+      el('div', { class: 'a' }, [fmt(amt)]),
+    ]);
+  };
+
+  // Grid: zawsze 3 kolumny. 3mc → 1 rząd, 6mc → 2 rzędy, rok (12mc) → 4 rzędy.
+  const cols = 3;
+  const rows = Math.ceil(N / cols);
+  const gridRows = [];
+  for (let r = 0; r < rows; r++) {
+    const startC = r * cols;
+    const sliceCells = cells.slice(startC, startC + cols);
+    const sliceEvs = eventsByCell.slice(startC, startC + cols);
+    // Wiersz etykiet
+    gridRows.push(el('div', { style: 'display:grid;grid-template-columns:repeat(3, 1fr);border-bottom:1.5px solid var(--border);padding-bottom:6px;gap:6px' }, sliceCells.map((c, i) => {
+      const hasEv = sliceEvs[i]?.length > 0;
+      return el('div', { class: 'tl-month', style: `text-align:center;font-size:10px;font-weight:700;color:${c.isCurr ? 'var(--fg)' : (hasEv ? 'var(--muted-2)' : 'var(--muted-4)')};letter-spacing:0.5px;text-transform:uppercase` }, [
+        el('span', {}, [c.label]),
+        el('span', { style: 'margin-left:4px;color:var(--muted);font-weight:600' }, [`'${String(c.yr).slice(2)}`]),
+        c.isCurr ? el('span', { style: 'display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--accent);margin-left:5px;vertical-align:middle' }) : null,
+      ]);
+    })));
+    // Wiersz z kafelkami
+    gridRows.push(el('div', { style: 'display:grid;grid-template-columns:repeat(3, 1fr);gap:6px;margin-top:12px;margin-bottom:20px' }, sliceEvs.map(evs => {
+      return el('div', { style: 'min-width:0' }, evs.length ? evs.map(renderTile) : [el('div', { style: 'font-size:9px;color:var(--border-3);text-align:center;padding:4px 0' }, ['—'])]);
+    })));
+  }
+
+  // Chip helpers
+  const trybChip = (label, stateKey, stateVal) => el('span', {
+    class: 'chip ' + (STATE[stateKey] === stateVal ? 'active' : ''),
+    onclick: () => { STATE[stateKey] = stateVal; render(); },
+  }, [label]);
+
+  // Filtr kategorii — ichipy (ikony + nazwa). 4 główne + "Więcej" (razem 5 = 1 rząd) rozwija pełną siatkę.
+  const TOP5 = ['Firma', 'Nela', 'Dom', 'Restauracje'];
+  const restCats = CATS.filter(k => !TOP5.includes(k));
+  const showAllLegend = STATE.tlShowAllCats;
+  const legendChips = [];
+  TOP5.forEach(k => legendChips.push(ichip(k.split(' ')[0], catIcon(k), !STATE.tlHiddenCats[k], () => { STATE.tlHiddenCats[k] = !STATE.tlHiddenCats[k]; render(); }, 'ylw')));
+  if (showAllLegend) {
+    restCats.forEach(k => legendChips.push(ichip(k.split(' ')[0], catIcon(k), !STATE.tlHiddenCats[k], () => { STATE.tlHiddenCats[k] = !STATE.tlHiddenCats[k]; render(); }, 'ylw')));
+    legendChips.push(ichip('Mniej', '<path d="M18 15l-6-6-6 6"/>', false, () => { STATE.tlShowAllCats = false; render(); }));
+  } else {
+    legendChips.push(ichip('Więcej', '<circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/>', false, () => { STATE.tlShowAllCats = true; render(); }));
+  }
+  const legend = el('div', { class: 'ichips-wrap' }, legendChips);
+
+  const totalEvents = eventsByCell.reduce((s, c) => s + c.length, 0);
+  const firstCell = cells[0], lastCell = cells[cells.length - 1];
+  const rangeLabel = `${ML[firstCell.mi - 1]} '${String(firstCell.yr).slice(2)} → ${ML[lastCell.mi - 1]} '${String(lastCell.yr).slice(2)}`;
+
+  const smChip = (label, stateKey, stateVal) => el('span', {
+    class: 'chip sm ' + (STATE[stateKey] === stateVal ? 'active' : ''),
+    onclick: () => { STATE[stateKey] = stateVal; render(); },
+  }, [label]);
+
+  const root = el('div', { class: 'tl-page' }, [
+    el('div', { style: 'padding:22px 24px 18px' }, [
+      el('div', { class: 'big-h' }, ['Historia']),
+    ]),
+    el('div', { style: 'padding:0 24px 18px;display:flex;align-items:center;gap:6px;flex-wrap:nowrap;justify-content:space-between' }, [
+      smChip('3mc', 'tlBucket', '3mc'),
+      smChip('6mc', 'tlBucket', '6mc'),
+      smChip('rok', 'tlBucket', 'rok'),
+      smChip('1 rok', 'tlZakres', '1'),
+      smChip('2 lata', 'tlZakres', '2'),
+      smChip('3 lata', 'tlZakres', '3'),
+    ]),
+    el('div', { class: 'tl-grid', style: 'padding:24px 18px 0' }, gridRows),
+  ]);
+  // Renderuj legendę poza #app (host w body) — żeby position:fixed faktycznie działało
+  const host = document.getElementById('tl-legend-host');
+  if (host) {
+    host.innerHTML = '';
+    host.appendChild(legend);
+    host.style.display = 'block';
+  }
+  return root;
+}
+
+// ============== MAIN RENDER ==============
+function render() {
+  const app = document.getElementById('app');
+  // Shell anim tylko gdy widok się zmienił (nie przy swipe w obrębie tego samego widoku)
+  const sameView = STATE._lastView === STATE.view;
+  document.body.classList.toggle('no-shell-anim', sameView);
+  STATE._lastView = STATE.view;
+  app.innerHTML = '';
+  // Ukryj legendę Historii jeśli zmieniamy widok (renderTimeline pokaże ją z powrotem)
+  const legendHost = document.getElementById('tl-legend-host');
+  if (legendHost && STATE.view !== 'timeline') legendHost.style.display = 'none';
+  app.appendChild(({
+    home: renderHome,
+    plan: renderPlan,
+    trans: renderTrans,
+    charts: renderCharts,
+    timeline: renderTimeline,
+  }[STATE.view] || renderHome)());
+
+  // Topbar — miesiąc + rok dla wszystkich widoków (Timeline tez używa sliding window centrowanego na (yr,mi))
+  const lbl = document.getElementById('month-label');
+  lbl.textContent = `${ML_FULL[STATE.mi - 1]} ${String(STATE.yr).slice(2)}`;
+  lbl.classList.remove('year-only');
+
+  // Update nav active
+  $$('.nav-item').forEach(n => {
+    const v = n.getAttribute('data-view');
+    n.classList.toggle('active', v === STATE.view);
+  });
+
+  // Update strzałki — disable visually gdy granica miesięcznych danych
+  document.getElementById('prev-month').classList.toggle('disabled', !canGoPrev());
+  document.getElementById('next-month').classList.toggle('disabled', !canGoNext());
+
+  // Apply hide-amounts re-render is enough
+  document.body.classList.toggle('big-text', !!STATE.bigText);
+  syncThemeSeg();
+
+  // Stagger animations
+  const groups = ['.hero-anim', '.mini-tile', '.ichip', '.pr', '.tx-row', '.tx-month-h', '.tl-month', '.tl-box', '.trans-add-tile', '.chip'];
+  groups.forEach(sel => {
+    document.querySelectorAll('#app ' + sel).forEach((el, i) => {
+      const d = i * 45;
+      el.style.setProperty('--d', d + 'ms');
+      el.style.setProperty('--d2', (d + 350) + 'ms');
+    });
+  });
+}
+
+// ============== ADD MODAL ==============
+// (openAddModal + renderAddBody + saveAdd zdefiniowane niżej — Task 9)
+
+// ============== SWIPE NAV ==============
+let swipe = null;
+const SWIPE_THRESHOLD = 70;
+
+function onPointerDown(e) {
+  if (e.button !== undefined && e.button > 0) return;
+  // Nie obsługuj swipe gdy otwarty modal/sheet/picker
+  if (document.querySelector('.sheet.show, .mpicker.show, .mp-bg.show, .modal-bg.show')) return;
+  // Nie startuj z inputów/przycisków (klik tam ma działać normalnie)
+  const tag = (e.target.tagName || '').toLowerCase();
+  if (['input','textarea','select','button'].includes(tag)) return;
+  swipe = { x0: e.clientX, y0: e.clientY, active: false, started: false };
+}
+
+function onPointerMove(e) {
+  if (!swipe) return;
+  const dx = e.clientX - swipe.x0;
+  const dy = e.clientY - swipe.y0;
+  if (!swipe.started) {
+    if (Math.abs(dx) < 12 && Math.abs(dy) < 12) return;
+    // Decide direction once
+    if (Math.abs(dx) > Math.abs(dy) * 1.3) {
+      swipe.started = true;
+      swipe.active = true;
+    } else {
+      swipe = null;
+      return;
+    }
+  }
+  if (!swipe.active) return;
+  const app = document.getElementById('app');
+  app.style.transition = 'none';
+  app.style.transform = `translateX(${dx}px)`;
+}
+
+function onPointerUp(e) {
+  if (!swipe) return;
+  const wasActive = swipe.active;
+  const dx = (e.clientX || 0) - swipe.x0;
+  swipe = null;
+  if (!wasActive) return;
+  const app = document.getElementById('app');
+  if (Math.abs(dx) > SWIPE_THRESHOLD) {
+    const goNext = dx < 0;
+    // Blok jeśli nie wolno — odbij wizualnie
+    if ((goNext && !canGoNext()) || (!goNext && !canGoPrev())) {
+      app.style.transition = 'transform 0.22s cubic-bezier(0.16, 1, 0.3, 1)';
+      app.style.transform = 'translateX(0)';
+      return;
+    }
+    const w = window.innerWidth;
+    app.style.transition = 'transform 0.22s cubic-bezier(0.4, 0, 1, 1)';
+    app.style.transform = `translateX(${goNext ? -w : w}px)`;
+    setTimeout(() => {
+      if (goNext) { STATE.mi++; if (STATE.mi > 12) { STATE.mi = 1; STATE.yr++; } }
+      else { STATE.mi--; if (STATE.mi < 1) { STATE.mi = 12; STATE.yr--; } }
+      app.style.transition = 'none';
+      app.style.transform = 'translateX(0)';
+      render();
+    }, 220);
+  } else {
+    app.style.transition = 'transform 0.22s cubic-bezier(0.16, 1, 0.3, 1)';
+    app.style.transform = 'translateX(0)';
+  }
+}
+
+// ============== MONTH PICKER ==============
+let pickerYear = null;
+function openMonthPicker() {
+  pickerYear = STATE.yr;
+  renderPicker();
+  $('#mp-bg').classList.add('show');
+  $('#mpicker').classList.add('show');
+}
+function closeMonthPicker() {
+  $('#mp-bg').classList.remove('show');
+  $('#mpicker').classList.remove('show');
+}
+function renderPicker() {
+  if (!STATE.data) return;
+  const allWpisy = getAllWpisy();
+  const years = [...new Set(allWpisy.map(w => w.rok))].sort();
+  const monthsInYear = new Set(allWpisy.filter(w => w.rok === pickerYear).map(w => w.miesiac));
+
+  const yearsEl = $('#mp-years');
+  yearsEl.innerHTML = '';
+  years.forEach(y => {
+    const tab = el('div', { class: 'mp-year' + (y === pickerYear ? ' active' : ''), onclick: () => { pickerYear = y; renderPicker(); } }, [String(y)]);
+    yearsEl.appendChild(tab);
+  });
+
+  const monthsEl = $('#mp-months');
+  monthsEl.innerHTML = '';
+  ML.forEach((m, i) => {
+    const mi = i + 1;
+    const has = monthsInYear.has(mi);
+    const isActive = pickerYear === STATE.yr && mi === STATE.mi;
+    const cls = 'mp-month' + (isActive ? ' active' : '') + (!has ? ' empty' : '');
+    monthsEl.appendChild(el('div', { class: cls, onclick: () => { STATE.yr = pickerYear; STATE.mi = mi; closeMonthPicker(); render(); } }, [m]));
+  });
+}
+
+// ============== SHEETS ==============
+function showSheet(id) {
+  $('#modal-bg').classList.add('show');
+  $('#' + id).classList.add('show');
+}
+function closeSheet() {
+  $('#modal-bg').classList.remove('show');
+  $$('.sheet').forEach(s => s.classList.remove('show'));
+}
+
+// ============== LIGHTBOX EDYCJI (Task 8) ==============
+let editState = null;
+function openLightbox(wpis) {
+  // Pełna kopia żeby edycja w modal nie modyfikowała natychmiast
+  editState = {
+    orig: wpis,
+    nazwa: wpis.nazwa,
+    kwota: wpis.kwota,
+    szacunek: getSzacunek(wpis),
+    kategoria: wpis.kategoria,
+    kierunek: wpis.kierunek,
+    dzielony: wpis.dzielony,
+    kwota_partnera: wpis.kwota_partnera || 0,
+    anomalia: wpis.anomalia,
+    opis: wpis.opis || '',
+  };
+  renderEditBody();
+  showSheet('edit-sheet');
+}
+
+function renderEditBody() {
+  const body = $('#edit-body');
+  const foot = $('#edit-foot');
+  body.innerHTML = '';
+  foot.innerHTML = '';
+  const w = editState.orig;
+  const hasTemplate = w.template_id != null;
+
+  // Nazwa
+  body.appendChild(el('div', { style: 'margin-bottom:12px' }, [
+    el('div', { class: 'caps-i', style: 'margin-bottom:6px' }, ['Nazwa']),
+    el('input', { type: 'text', value: editState.nazwa, style: 'width:100%;border:none;border-bottom:1px solid #ddd;padding:6px 0;font-size:16px;font-weight:700;outline:none', oninput: (e) => editState.nazwa = e.target.value }),
+  ]));
+
+  // Kwota główna ("Zapłacona" dla wpisów z templatem, "Kwota" dla transakcji)
+  body.appendChild(el('div', { style: 'margin-bottom:14px' }, [
+    el('div', { class: 'caps-i', style: 'margin-bottom:6px' }, [hasTemplate ? 'Zapłacona' : 'Kwota']),
+    el('div', { style: 'display:flex;align-items:baseline;gap:8px;border-bottom:2px solid #000;padding-bottom:8px' }, [
+      el('input', { type: 'number', value: editState.kwota, inputmode: 'decimal', style: 'flex:1;border:none;outline:none;font-family:Anton;font-size:42px;line-height:1;letter-spacing:-1.5px;background:transparent;color:var(--fg);min-width:0;padding:0', oninput: (e) => editState.kwota = Number(e.target.value) || 0 }),
+      el('span', { class: 'caps-i' }, ['PLN']),
+    ]),
+  ]));
+
+  // Suma stała (template's szacunek) — tylko dla wpisów z templatem
+  if (hasTemplate) {
+    body.appendChild(el('div', { style: 'margin-bottom:18px' }, [
+      el('div', { class: 'caps-i', style: 'margin-bottom:6px' }, ['Suma stała (szacunek)']),
+      el('div', { style: 'display:flex;align-items:baseline;gap:8px;border-bottom:1px solid #ddd;padding-bottom:6px' }, [
+        el('input', { type: 'number', value: editState.szacunek, inputmode: 'decimal', style: 'flex:1;border:none;outline:none;font-family:Anton;font-size:24px;line-height:1;letter-spacing:-0.6px;background:transparent;color:var(--muted-2);min-width:0;padding:0', oninput: (e) => editState.szacunek = Number(e.target.value) || 0 }),
+        el('span', { class: 'caps-i', style: 'color:var(--muted)' }, ['PLN']),
+      ]),
+    ]));
+  }
+
+  // Kierunek (dla transakcji edytowalne; dla stale/nadch fix wg template)
+  if (w.typ === 'transakcja') {
+    body.appendChild(el('div', { style: 'margin-bottom:12px' }, [
+      el('div', { class: 'caps-i', style: 'margin-bottom:8px' }, ['Kierunek']),
+      el('div', { style: 'display:flex;gap:6px' }, [
+        el('span', { class: 'chip ' + (editState.kierunek === 'wydatek' ? 'active' : ''), onclick: () => { editState.kierunek = 'wydatek'; renderEditBody(); } }, ['Wydatek']),
+        el('span', { class: 'chip ' + (editState.kierunek === 'przychod' ? 'active' : ''), onclick: () => { editState.kierunek = 'przychod'; renderEditBody(); } }, ['Przychód']),
+      ]),
+    ]));
+  }
+
+  // Kategoria
+  body.appendChild(el('div', { style: 'margin-bottom:12px' }, [
+    el('div', { class: 'caps-i', style: 'margin-bottom:10px' }, ['Kategoria']),
+    el('div', { class: 'ichips-wrap' }, CATS.map(k =>
+      ichip(k.split(' ')[0], catIcon(k), editState.kategoria === k, () => { editState.kategoria = k; renderEditBody(); }, editState.kategoria === k ? 'ylw' : '')
+    )),
+  ]));
+
+  // Toggle dzielony + udział partnera + anomalia — tylko dla nie-Stałych (Stałe nie mogą być wspólne/anomalia)
+  if (w.typ !== 'stale') {
+    body.appendChild(el('div', { style: 'padding:12px 0;border-top:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center;cursor:pointer', onclick: () => { editState.dzielony = !editState.dzielony; renderEditBody(); } }, [
+      el('div', { style: 'font-size:14px;font-weight:600' }, ['Wspólny wydatek ♥']),
+      el('span', { class: 'toggle ' + (editState.dzielony ? 'on' : '') }),
+    ]));
+    if (editState.dzielony) {
+      body.appendChild(el('div', { style: 'padding:6px 0 12px 14px;border-left:3px solid #ef4444;margin-bottom:4px' }, [
+        el('div', { class: 'caps-i', style: 'margin-bottom:6px;color:var(--danger-2)' }, ['Udział partnera (PLN)']),
+        el('input', {
+          type: 'number', inputmode: 'decimal', placeholder: '0',
+          value: editState.kwota_partnera || '',
+          style: 'width:100%;border:none;border-bottom:1px solid #ddd;padding:6px 0;font-family:Anton;font-size:20px;letter-spacing:-0.4px;outline:none;background:transparent',
+          oninput: (e) => editState.kwota_partnera = Number(e.target.value) || 0,
+        }),
+      ]));
+    }
+    body.appendChild(el('div', { style: 'padding:12px 0;border-top:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center;cursor:pointer', onclick: () => { editState.anomalia = !editState.anomalia; renderEditBody(); } }, [
+      el('div', { style: 'font-size:14px;font-weight:600' }, ['Warto zapamiętać ★']),
+      el('span', { class: 'toggle ' + (editState.anomalia ? 'on' : '') }),
+    ]));
+  }
+
+  // Promote do Nadchodzących (tylko dla alertów = transakcja z anomalia=true)
+  if (w.typ === 'transakcja' && w.anomalia) {
+    body.appendChild(el('div', { style: 'padding:14px 0;border-top:1px solid #f0f0f0' }, [
+      el('button', { style: 'width:100%;padding:12px;background:var(--accent);border:none;font-family:Anton;font-size:16px;letter-spacing:-0.3px;cursor:pointer', onclick: () => promoteAlertToNadchodzace(w) }, ['Dodaj jako Nadchodzący ↑']),
+    ]));
+  }
+
+  // Foot: dla Stałych — dwa Usuń obok siebie nad ZAPISZ; dla reszty — Usuń nad ZAPISZ
+  if (w.typ === 'stale' && w.template_id != null) {
+    foot.appendChild(el('div', { style: 'display:flex;gap:8px' }, [
+      el('button', {
+        style: 'flex:1;padding:14px;background:var(--card);border:1px solid #ef4444;color:var(--danger-2);cursor:pointer;font-weight:700;font-size:13px;letter-spacing:0.3px',
+        onclick: deleteFromLightbox,
+      }, ['Usuń ten miesiąc']),
+      el('button', {
+        style: 'flex:1;padding:14px;background:var(--danger-2);border:none;color:#fff;cursor:pointer;font-weight:700;font-size:13px;letter-spacing:0.3px',
+        onclick: deleteWholeTemplate,
+      }, ['Usuń całkiem']),
+    ]));
+  } else {
+    foot.appendChild(el('button', {
+      style: 'width:100%;padding:14px;background:var(--card);border:1px solid #ef4444;color:var(--danger-2);cursor:pointer;font-weight:700;font-size:13px;letter-spacing:0.3px',
+      onclick: deleteFromLightbox,
+    }, ['Usuń']));
+  }
+  foot.appendChild(el('button', {
+    style: 'width:100%;background:var(--accent);border:none;padding:18px;font-family:Anton;font-size:22px;letter-spacing:-0.5px;cursor:pointer',
+    onclick: saveEdit,
+  }, ['ZAPISZ']));
+}
+
+async function saveEdit() {
+  if (!editState) return;
+  const w = editState.orig;
+  const patch = {
+    nazwa: editState.nazwa,
+    kategoria: editState.kategoria,
+    kierunek: editState.kierunek,
+    dzielony: editState.dzielony,
+    kwota_partnera: editState.kwota_partnera,
+    anomalia: editState.anomalia,
+    opis: editState.opis,
+    kwota: editState.kwota,
+  };
+
+  const hasTemplate = w.template_id != null;
+  const origSzacunek = getSzacunek(w);
+  const szacunekChanged = hasTemplate && editState.szacunek !== origSzacunek;
+
+  if (szacunekChanged) {
+    const tpl = getTemplate(w.template_id);
+    const choice = await dialog({
+      title: 'Zmienić sumę stałą?',
+      message: `"${tpl ? tpl.nazwa : w.nazwa}" — ${origSzacunek} → ${editState.szacunek}`,
+      buttons: [
+        { label: 'Tylko ten miesiąc', value: 'this', style: 'primary' },
+        { label: 'Od teraz na stałe (zmienia template)', value: 'template', style: 'outline' },
+        { label: 'Anuluj', value: null, style: 'cancel' },
+      ],
+    });
+    if (!choice) return;
+    if (choice === 'this') {
+      patch.kwota_szacunek_override = editState.szacunek;
+    } else {
+      updateTemplate(w.template_id, { kwota_szacunek: editState.szacunek });
+      // wyczyść stary override jeśli był (template wygrywa)
+      if (w.kwota_szacunek_override != null) patch.kwota_szacunek_override = null;
+    }
+  }
+
+  updateWpis(w.id, patch);
+  closeSheet();
+  render();
+}
+
+async function deleteWholeTemplate() {
+  if (!editState) return;
+  const w = editState.orig;
+  const tplId = w.template_id;
+  const tpl = getTemplate(tplId);
+  const tplNazwa = tpl ? tpl.nazwa : w.nazwa;
+  // Zbierz wszystkie wpisy z tym template_id (across wszystkich mc)
+  const wpisy = getAllWpisy().filter(x => x.template_id === tplId);
+  const ok = await confirmDialog(
+    `Usunąć "${tplNazwa}" całkiem?`,
+    `Skasuje template + ${wpisy.length} wpis${wpisy.length === 1 ? '' : 'y'} ze wszystkich miesięcy.`,
+    'Usuń całkiem',
+  );
+  if (!ok) return;
+  // 1. Usuń template z list (addedTemplates locally; deletedTemplates dla base)
+  const addedTplIdx = (STATE.localEdits.addedTemplates || []).findIndex(t => t.id === tplId);
+  if (addedTplIdx !== -1) {
+    STATE.localEdits.addedTemplates.splice(addedTplIdx, 1);
+  } else {
+    if (!STATE.localEdits.deletedTemplates) STATE.localEdits.deletedTemplates = [];
+    if (!STATE.localEdits.deletedTemplates.includes(tplId)) STATE.localEdits.deletedTemplates.push(tplId);
+  }
+  apiDeleteTemplate(tplId);
+  // 2. Soft-delete all wpisy referencing this template
+  wpisy.forEach(w => {
+    const idx = STATE.localEdits.added.findIndex(x => x.id === w.id);
+    if (idx !== -1) STATE.localEdits.added.splice(idx, 1);
+    else if (!STATE.localEdits.deleted.includes(w.id)) STATE.localEdits.deleted.push(w.id);
+    apiDeleteWpis(w.id);
+  });
+  saveLocal();
+  closeSheet();
+  render();
+}
+
+async function deleteFromLightbox() {
+  if (!editState) return;
+  const ok = await confirmDialog(`Usunąć "${editState.orig.nazwa}"?`, 'Tylko w tym miesiącu.', 'Usuń');
+  if (!ok) return;
+  deleteWpis(editState.orig.id);
+  closeSheet();
+  render();
+}
+
+function promoteAlertToNadchodzace(w) {
+  const nazwa = prompt('Nazwa nadchodzącego wydatku:', w.nazwa);
+  if (!nazwa) return;
+  const kwota = Number(prompt('Kwota szacunku:', Math.abs(w.kwota))) || 0;
+  if (kwota <= 0) return;
+  const miesiac = Number(prompt('Miesiąc (1-12) w którym przypada:', w.miesiac)) || w.miesiac;
+
+  // Dodaj template + instance do localEdits + API (Apps Script zrobi to samo w Fazie 3)
+  const newTemplateId = Math.max(0, ...STATE.data.templates.map(t => t.id), ...Object.keys(STATE.localEdits.templates || {}).map(Number)) + 1;
+  if (!STATE.localEdits.addedTemplates) STATE.localEdits.addedTemplates = [];
+  const newTpl = {
+    id: newTemplateId,
+    nazwa, kategoria: w.kategoria, kierunek: 'wydatek',
+    kwota_szacunek: kwota, freq: 'annual', miesiac, aktywny: true,
+  };
+  STATE.localEdits.addedTemplates.push(newTpl);
+  apiAddTemplate(newTpl);
+  // Instance dla najbliższego roku z miesiącem
+  const now = new Date();
+  let targetYr = now.getFullYear();
+  if (miesiac < now.getMonth() + 1) targetYr++; // jeśli ten miesiąc minął, weź kolejny rok
+  const newWpis = {
+    id: nextWpisId(),
+    typ: 'nadchodzace',
+    kierunek: 'wydatek',
+    rok: targetYr, miesiac,
+    data: '',
+    nazwa, kategoria: w.kategoria,
+    kwota: 0, kwota_partnera: 0,
+    dzielony: false, anomalia: false,
+    template_id: newTemplateId,
+    opis: '', usuniety: false,
+  };
+  STATE.localEdits.added.push(newWpis);
+  apiAddWpis(newWpis);
+  saveLocal();
+  toast(`Dodano "${nazwa}" jako Nadchodzący ${targetYr}/${miesiac}`);
+  closeSheet();
+  render();
+}
+
+// ============== ADD MODAL (Task 9) ==============
+let addState = null;
+
+function openAddModal(tryb = 'transakcja', locked = false) {
+  addState = {
+    tryb, // 'transakcja' | 'stale' | 'nadchodzace'
+    locked, // jeśli true → nie pokazuj chip'ów wyboru trybu/kierunku
+    nazwa: '',
+    kwota: 0,
+    kategoria: 'Inne',
+    kierunek: 'wydatek',
+    miesiac: STATE.mi,
+    miesiac_annual: STATE.mi,
+    opis: '',
+    dzielony: false,
+    anomalia: false,
+    kwota_partnera: 0,
+  };
+  renderAddBody();
+  showSheet('add-sheet');
+  setTimeout(() => $('#add-amount-input')?.focus(), 200);
+}
+
+function renderAddBody() {
+  const body = $('#add-body');
+  body.innerHTML = '';
+
+  // Bottom-nav "+" otwiera niezalockowany → wymuś tryb=transakcja (nie ma chip'ów wyboru)
+  if (!addState.locked) addState.tryb = 'transakcja';
+  // Wymuś kierunek wydatek dla stale/nadchodzace (tylko transakcja może być przychodem)
+  if (addState.tryb !== 'transakcja') addState.kierunek = 'wydatek';
+
+  // Tytuł sheeta: jeden napis zamiast "Dodaj" + osobny banner. Dla transakcji obok tytułu są chipy kierunku.
+  const titleLabel = addState.tryb === 'transakcja' ? 'Dodaj transakcję' : addState.tryb === 'stale' ? 'Dodaj stały' : 'Dodaj nadchodzący';
+  $('#add-title').textContent = titleLabel;
+  const kdir = $('#add-kdir');
+  kdir.innerHTML = '';
+  if (addState.tryb === 'transakcja') {
+    kdir.appendChild(el('span', { class: 'km-chip ' + (addState.kierunek === 'wydatek' ? 'active' : ''), onclick: () => { addState.kierunek = 'wydatek'; renderAddBody(); } }, ['Wydatek']));
+    kdir.appendChild(el('span', { class: 'km-chip ' + (addState.kierunek === 'przychod' ? 'active' : ''), onclick: () => { addState.kierunek = 'przychod'; renderAddBody(); } }, ['Przychód']));
+  }
+
+  // 1. KWOTA
+  const kwotaLabel = addState.tryb === 'transakcja' ? 'Kwota' : 'Kwota szacunku';
+  body.appendChild(el('div', { style: 'margin-bottom:16px' }, [
+    el('div', { class: 'caps-i', style: 'margin-bottom:8px' }, [kwotaLabel]),
+    el('div', { style: 'display:flex;align-items:baseline;gap:8px;border-bottom:2px solid #000;padding-bottom:8px' }, [
+      el('input', { type: 'number', inputmode: 'decimal', placeholder: '0', id: 'add-amount-input', value: addState.kwota || '', style: 'flex:1;border:none;outline:none;font-family:Anton;font-size:42px;line-height:1;letter-spacing:-1.5px;background:transparent;color:var(--fg);min-width:0;padding:0', oninput: (e) => addState.kwota = Number(e.target.value) || 0 }),
+      el('span', { class: 'caps-i' }, ['PLN']),
+    ]),
+  ]));
+
+  // 2. NAZWA
+  body.appendChild(el('div', { style: 'margin-bottom:16px' }, [
+    el('div', { class: 'caps-i', style: 'margin-bottom:6px' }, ['Nazwa']),
+    el('input', { type: 'text', placeholder: addState.tryb === 'stale' ? 'np. Netflix' : 'np. Tankowanie · Orlen', value: addState.nazwa || '', style: 'width:100%;border:none;border-bottom:1px solid #ddd;padding:6px 0;font-size:14px;outline:none', oninput: (e) => addState.nazwa = e.target.value }),
+  ]));
+
+  // 3. KATEGORIA
+  body.appendChild(el('div', { style: 'margin-bottom:16px' }, [
+    el('div', { class: 'caps-i', style: 'margin-bottom:10px' }, ['Kategoria']),
+    el('div', { class: 'ichips-wrap' }, CATS.map(k => ichip(k.split(' ')[0], catIcon(k), addState.kategoria === k, () => { addState.kategoria = k; renderAddBody(); }))),
+  ]));
+
+  // 4. DATA — grid kafelków. Stale = brak (zawsze bieżący mc). Nadchodzace w locked mode = brak (też bieżący).
+  const showDate = addState.tryb === 'transakcja' || (addState.tryb === 'nadchodzace' && !addState.locked);
+  if (showDate) {
+    const monthKey = addState.tryb === 'transakcja' ? 'miesiac' : 'miesiac_annual';
+    const monthLabel = addState.tryb === 'transakcja' ? `Data · ${STATE.yr}` : 'Data (miesiąc w roku)';
+    body.appendChild(el('div', { style: 'margin-bottom:16px' }, [
+      el('div', { class: 'caps-i', style: 'margin-bottom:8px' }, [monthLabel]),
+      el('div', { class: 'month-grid' }, ML_FULL.map((m, i) => {
+        const mi = i + 1;
+        const active = addState[monthKey] === mi;
+        return el('div', {
+          class: 'month-cell' + (active ? ' active' : ''),
+          onclick: () => { addState[monthKey] = mi; renderAddBody(); },
+        }, [m.slice(0, 3)]);
+      })),
+    ]));
+  }
+
+  // 5. Toggle dzielony + anomalia — na samym dole. Stałe nie mogą być wspólne ani anomalią.
+  if (addState.tryb !== 'stale') {
+    body.appendChild(el('div', { style: 'padding:12px 0;border-top:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center;cursor:pointer', onclick: () => { addState.dzielony = !addState.dzielony; renderAddBody(); } }, [
+      el('div', { style: 'font-size:14px;font-weight:600' }, ['Wspólny wydatek ♥']),
+      el('span', { class: 'toggle ' + (addState.dzielony ? 'on' : '') }),
+    ]));
+    // Kwota partnera — input pod toggle, tylko jeśli dzielony=on
+    if (addState.dzielony) {
+      body.appendChild(el('div', { style: 'padding:6px 0 12px 14px;border-left:3px solid #ef4444;margin-bottom:4px' }, [
+        el('div', { class: 'caps-i', style: 'margin-bottom:6px;color:var(--danger-2)' }, ['Udział partnera (PLN)']),
+        el('input', {
+          type: 'number', inputmode: 'decimal', placeholder: '0',
+          value: addState.kwota_partnera || '',
+          style: 'width:100%;border:none;border-bottom:1px solid #ddd;padding:6px 0;font-family:Anton;font-size:20px;letter-spacing:-0.4px;outline:none;background:transparent',
+          oninput: (e) => addState.kwota_partnera = Number(e.target.value) || 0,
+        }),
+      ]));
+    }
+    body.appendChild(el('div', { style: 'padding:12px 0;border-top:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center;cursor:pointer', onclick: () => { addState.anomalia = !addState.anomalia; renderAddBody(); } }, [
+      el('div', { style: 'font-size:14px;font-weight:600' }, ['Warto zapamiętać ★']),
+      el('span', { class: 'toggle ' + (addState.anomalia ? 'on' : '') }),
+    ]));
+  }
+}
+
+function saveAdd() {
+  if (!addState) return;
+  if (!addState.kwota && addState.tryb === 'transakcja') { toast('Wpisz kwotę', 'err'); return; }
+  if (!addState.nazwa) { toast('Wpisz nazwę', 'err'); return; }
+
+  if (addState.tryb === 'transakcja') {
+    const newWpis = {
+      id: nextWpisId(),
+      typ: 'transakcja',
+      kierunek: addState.kierunek,
+      rok: STATE.yr,
+      miesiac: addState.miesiac,
+      data: '',
+      nazwa: addState.nazwa,
+      kategoria: addState.kategoria,
+      kwota: addState.kwota,
+      kwota_partnera: addState.kwota_partnera || 0,
+      dzielony: addState.dzielony,
+      anomalia: addState.anomalia,
+      template_id: null,
+      opis: addState.opis,
+      usuniety: false,
+    };
+    STATE.localEdits.added.push(newWpis);
+    apiAddWpis(newWpis);
+  } else {
+    // Stałe lub Nadchodzące — utwórz template + instance
+    if (!STATE.localEdits.addedTemplates) STATE.localEdits.addedTemplates = [];
+    const existingMaxId = Math.max(0, ...STATE.data.templates.map(t => t.id), ...STATE.localEdits.addedTemplates.map(t => t.id));
+    const newTemplateId = existingMaxId + 1;
+    const isStale = addState.tryb === 'stale';
+    const newTpl = {
+      id: newTemplateId,
+      nazwa: addState.nazwa,
+      kategoria: addState.kategoria,
+      kierunek: addState.kierunek,
+      kwota_szacunek: addState.kwota,
+      freq: isStale ? 'monthly' : 'annual',
+      miesiac: isStale ? null : addState.miesiac_annual,
+      aktywny: true,
+    };
+    STATE.localEdits.addedTemplates.push(newTpl);
+    apiAddTemplate(newTpl);
+    const targetMi = isStale ? STATE.mi : addState.miesiac_annual;
+    let targetYr = STATE.yr;
+    if (!isStale && targetMi < (new Date().getMonth() + 1) && STATE.yr === new Date().getFullYear()) {
+      targetYr++;
+    }
+    const newWpis = {
+      id: nextWpisId(),
+      typ: isStale ? 'stale' : 'nadchodzace',
+      kierunek: addState.kierunek,
+      rok: targetYr,
+      miesiac: targetMi,
+      data: '',
+      nazwa: addState.nazwa,
+      kategoria: addState.kategoria,
+      kwota: 0,
+      kwota_partnera: addState.kwota_partnera || 0,
+      dzielony: addState.dzielony,
+      anomalia: addState.anomalia,
+      template_id: newTemplateId,
+      opis: '',
+      usuniety: false,
+    };
+    STATE.localEdits.added.push(newWpis);
+    apiAddWpis(newWpis);
+  }
+
+  saveLocal();
+  closeSheet();
+  render();
+}
+
+// ============== BOOT ==============
+function boot() {
+  // Nav clicks
+  $$('.nav-item').forEach(n => {
+    n.addEventListener('click', () => {
+      const v = n.getAttribute('data-view');
+      STATE.view = v; STATE.filter = null; render();
+    });
+  });
+  $('#gear-btn').addEventListener('click', () => { showSheet('settings-sheet'); refreshBackupStatus(); });
+  $('#today-btn').addEventListener('click', () => {
+    const today = new Date();
+    STATE.yr = today.getFullYear();
+    STATE.mi = today.getMonth() + 1;
+    render();
+  });
+  // Month/Year nav — z blokadą (poza zakresem danych i gdy są ghosty w bieżącym mc)
+  $('#prev-month').addEventListener('click', () => {
+    if (!canGoPrev()) return;
+    STATE.mi--; if (STATE.mi < 1) { STATE.mi = 12; STATE.yr--; }
+    render();
+  });
+  $('#next-month').addEventListener('click', () => {
+    if (!canGoNext()) return;
+    STATE.mi++; if (STATE.mi > 12) { STATE.mi = 1; STATE.yr++; }
+    render();
+  });
+  $('#month-label').addEventListener('click', () => {
+    if (STATE.view !== 'timeline') openMonthPicker();
+  });
+  $('#mp-bg').addEventListener('click', closeMonthPicker);
+  // Swipe nav
+  document.addEventListener('pointerdown', onPointerDown);
+  document.addEventListener('pointermove', onPointerMove);
+  document.addEventListener('pointerup', onPointerUp);
+  document.addEventListener('pointercancel', onPointerUp);
+  // Modal close
+  $('#modal-bg').addEventListener('click', closeSheet);
+  $$('[data-close]').forEach(b => b.addEventListener('click', closeSheet));
+  $('#save-add').addEventListener('click', saveAdd);
+
+  // Settings toggles (hide-amounts, big-text)
+  function setToggle(id, key) {
+    const t = $('#' + id);
+    if (STATE[key]) t.classList.add('on'); else t.classList.remove('on');
+  }
+  $$('.set-row[data-toggle]').forEach(r => {
+    r.addEventListener('click', () => {
+      const t = r.getAttribute('data-toggle');
+      const map = { 'hide-amounts': 'hideAmounts', 'big-text': 'bigText' };
+      const key = map[t];
+      if (!key) return;
+      STATE[key] = !STATE[key];
+      localStorage.setItem(key, STATE[key]);
+      setToggle({ 'hide-amounts': 't-hide', 'big-text': 't-big-text' }[t], key);
+      render();
+    });
+  });
+  setToggle('t-hide', 'hideAmounts');
+  setToggle('t-big-text', 'bigText');
+
+  // Theme segmented control (Auto/Dzień/Noc)
+  $$('#theme-seg .seg').forEach(s => {
+    s.addEventListener('click', () => {
+      STATE.themeMode = s.getAttribute('data-mode');
+      localStorage.setItem('themeMode', STATE.themeMode);
+      applyTheme();
+    });
+  });
+  syncThemeSeg();
+
+  // Data source segmented control (Local/Cloud)
+  $$('#data-mode-seg .seg').forEach(s => {
+    s.addEventListener('click', async () => {
+      const dm = s.getAttribute('data-dm');
+      if (dm === STATE.dataMode) return;
+      STATE.dataMode = dm;
+      localStorage.setItem('dataMode', dm);
+      syncDataModeSeg();
+      toast(dm === 'cloud' ? 'Ładuję z chmury…' : 'Wracam do lokalnego…');
+      await loadData();
+    });
+  });
+  syncDataModeSeg();
+
+  // Cloud token input
+  const tokenEl = $('#cloud-token-input');
+  if (tokenEl) {
+    tokenEl.value = STATE.cloudToken || '';
+    tokenEl.addEventListener('change', () => {
+      STATE.cloudToken = tokenEl.value.trim();
+      localStorage.setItem('cloudToken', STATE.cloudToken);
+      toast(STATE.cloudToken ? 'Token zapisany' : 'Token wyczyszczony');
+    });
+  }
+
+  // Reaguj na zmianę systemu gdy tryb=auto
+  if (window.matchMedia) {
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+      if (STATE.themeMode === 'auto') applyTheme();
+    });
+  }
+
+  $('#export-xlsx').addEventListener('click', exportMonthXlsx);
+
+  async function refreshBackupStatus() {
+    try {
+      const r = await fetch('/api/backups');
+      const j = await r.json();
+      const meta = $('#backup-meta');
+      const sub = $('#backup-sub');
+      if (j.count === 0) {
+        meta.textContent = '0';
+        sub.textContent = 'Brak — zapisze się po pierwszej edycji';
+      } else {
+        meta.textContent = String(j.count);
+        const d = j.latest ? new Date(j.latest.mtime) : null;
+        const when = d ? `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` : '—';
+        sub.textContent = `${j.count}/${j.max} plików · ostatni ${when}`;
+      }
+    } catch (e) {
+      $('#backup-meta').textContent = '!';
+      $('#backup-sub').textContent = 'Nie udało się pobrać statusu';
+    }
+  }
+
+  function renderDiff(d) {
+    const body = $('#diff-body');
+    if (d.total === 0) {
+      body.innerHTML = `<div style="text-align:center;color:var(--muted-3);padding:40px 16px">
+        <div style="font-size:32px;margin-bottom:8px">✓</div>
+        <div style="font-size:14px">Brak lokalnych zmian</div>
+        <div style="font-size:11px;color:var(--muted-4);margin-top:6px">Wszystko zgodne z Sheets</div>
+      </div>`;
+      return;
+    }
+    const fmtKw = k => (k > 0 ? '+' : '') + Number(k).toFixed(2) + ' zł';
+    const sections = [];
+    const sync = d.syncedAt ? new Date(d.syncedAt) : null;
+    const syncTxt = sync ? `${sync.toLocaleDateString('pl-PL')} ${String(sync.getHours()).padStart(2,'0')}:${String(sync.getMinutes()).padStart(2,'0')}` : 'nigdy';
+    sections.push(`<div style="font-size:11px;color:var(--muted-4);margin-bottom:12px">Od ostatniego sync (${syncTxt})</div>`);
+
+    const w = d.wpisy;
+    if (w.added.length) {
+      sections.push(`<div class="diff-h">+ Dodane wpisy (${w.added.length})</div>`);
+      w.added.forEach(x => sections.push(`<div class="diff-row diff-add"><div class="diff-name">${x.nazwa || '(bez nazwy)'}</div><div class="diff-meta">${x.miesiac}/${x.rok} · ${fmtKw(x.kwota)}</div></div>`));
+    }
+    if (w.updated.length) {
+      sections.push(`<div class="diff-h">~ Zmienione wpisy (${w.updated.length})</div>`);
+      w.updated.forEach(x => {
+        const ch = Object.entries(x.changes).map(([k, v]) => `${k}: ${v.from} → ${v.to}`).join(', ');
+        sections.push(`<div class="diff-row diff-upd"><div class="diff-name">${x.nazwa}</div><div class="diff-meta">${ch}</div></div>`);
+      });
+    }
+    if (w.deleted.length) {
+      sections.push(`<div class="diff-h">− Usunięte wpisy (${w.deleted.length})</div>`);
+      w.deleted.forEach(x => sections.push(`<div class="diff-row diff-del"><div class="diff-name">${x.nazwa}</div><div class="diff-meta">${fmtKw(x.kwota)}</div></div>`));
+    }
+
+    const t = d.templates;
+    if (t.added.length || t.updated.length || t.deleted.length) {
+      sections.push(`<div class="diff-h" style="margin-top:16px">Stałe (templates)</div>`);
+      t.added.forEach(x => sections.push(`<div class="diff-row diff-add"><div class="diff-name">+ ${x.nazwa}</div><div class="diff-meta">${x.kategoria || ''}</div></div>`));
+      t.updated.forEach(x => {
+        const ch = Object.entries(x.changes).map(([k, v]) => `${k}: ${v.from} → ${v.to}`).join(', ');
+        sections.push(`<div class="diff-row diff-upd"><div class="diff-name">~ ${x.nazwa}</div><div class="diff-meta">${ch}</div></div>`);
+      });
+      t.deleted.forEach(x => sections.push(`<div class="diff-row diff-del"><div class="diff-name">− ${x.nazwa}</div></div>`));
+    }
+    body.innerHTML = sections.join('');
+  }
+
+  $('#show-diff').addEventListener('click', async () => {
+    showSheet('diff-sheet');
+    $('#diff-body').innerHTML = '<div style="text-align:center;color:var(--muted-3);padding:40px">Ładowanie…</div>';
+    try {
+      const r = await fetch('/api/diff');
+      const j = await r.json();
+      renderDiff(j);
+    } catch (e) {
+      $('#diff-body').innerHTML = `<div style="color:var(--danger);padding:16px">Błąd: ${e.message}</div>`;
+    }
+  });
+
+  $('#sync-sheets').addEventListener('click', async () => {
+    const statusEl = $('#sync-status');
+    statusEl.textContent = '...';
+    try {
+      const r = await fetch('/api/sync', { method: 'POST' });
+      const j = await r.json();
+      if (!r.ok || !j.ok) throw new Error(j.error || 'Sync failed');
+      statusEl.textContent = '✓';
+      toast(`Sync OK — ${j.wpisy} wpisów`);
+      await loadData();
+    } catch (e) {
+      statusEl.textContent = '✗';
+      toast('Sync error: ' + e.message, 'err');
+    }
+    setTimeout(() => statusEl.textContent = '⟳', 3000);
+  });
+  loadData();
+}
+
+boot();
+</script>
+</body>
+</html>

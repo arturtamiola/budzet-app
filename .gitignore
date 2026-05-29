@@ -1,0 +1,23 @@
+# Dev/local only — nie publikujemy
+serve.js
+node_modules/
+*.bak
+*.old.html
+
+# Dane lokalne — żyją tylko na lapku Artura
+dane.json
+dane-edits.json
+backups/
+
+# Skrypty dev (Excel converter, CSV reseed, etc.) — nie potrzebne na GitHub Pages
+convert-data.js
+convert-from-excels.js
+import-xlsx-monthly.js
+regen-csv.js
+reseed-sheets.js
+sync-from-sheets.js
+test-convert.js
+sheets-import/
+
+# Podglądy dev
+podglad.html
