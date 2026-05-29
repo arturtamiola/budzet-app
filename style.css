@@ -275,10 +275,10 @@ body { padding-bottom: 90px; min-height: 100vh; transition: background 0.18s, co
 /* Modal/sheet */
 .modal-bg { position: fixed; inset: 0; background: var(--modal-overlay); z-index: 100; display: none; }
 .modal-bg.show { display: block; }
-.sheet { position: fixed; inset: 0; background: var(--bg); z-index: 101; display: none; flex-direction: column; color: var(--fg); }
+.sheet { position: fixed; top: 0; left: 0; right: 0; height: var(--vvh, 100dvh); background: var(--bg); z-index: 101; display: none; flex-direction: column; color: var(--fg); }
 .sheet.show { display: flex; }
 /* Wariant lightbox: nie pełny ekran, widać tło */
-.sheet.sheet-modal { inset: auto 16px 16px 16px; top: 64px; max-width: 400px; margin: 0 auto; border-radius: 16px; box-shadow: 0 12px 48px var(--shadow-modal); overflow: hidden; }
+.sheet.sheet-modal { top: 64px; left: 16px; right: 16px; bottom: auto; height: auto; max-height: calc(var(--vvh, 100dvh) - 80px); max-width: 400px; margin: 0 auto; border-radius: 16px; box-shadow: 0 12px 48px var(--shadow-modal); overflow: hidden; }
 .sheet.sheet-modal .head { padding: 14px 20px 10px; }
 .sheet.sheet-modal .head .title { font-size: 32px; letter-spacing: -1.2px; }
 .sheet .head { padding: 18px 24px 14px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--surface-3); }

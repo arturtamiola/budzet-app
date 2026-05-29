@@ -497,6 +497,27 @@ function toast(msg, type = 'ok') {
   }, 2500);
 }
 
+// Mobile keyboard fix: --vvh = wysokość visual viewport (klawiatura skraca)
+function updateVvh() {
+  const h = (window.visualViewport ? window.visualViewport.height : window.innerHeight);
+  document.documentElement.style.setProperty('--vvh', h + 'px');
+}
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', updateVvh);
+  window.visualViewport.addEventListener('scroll', updateVvh);
+}
+window.addEventListener('resize', updateVvh);
+updateVvh();
+
+// Focus na input → scroll do widoku (ponad klawiaturę)
+document.addEventListener('focusin', (e) => {
+  if (e.target.matches && e.target.matches('input, textarea, select')) {
+    setTimeout(() => {
+      try { e.target.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (_) {}
+    }, 300);
+  }
+});
+
 // ============== DATA LOADING ==============
 const CLOUD_URL = 'https://script.google.com/macros/s/AKfycby1qc3GuHZMKifri5L1yMQ4jDox1uLHezQgT3k5uJU0PR3w9Dt1U0awvxUtGOxpF71w5A/exec';
 const EMPTY_EDITS = { added: [], updated: {}, deleted: [], templates: {}, addedTemplates: [], deletedTemplates: [], planOverrides: {}, paidRecurring: {} };
