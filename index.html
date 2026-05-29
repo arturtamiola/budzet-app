@@ -655,6 +655,15 @@ async function cloudCall(localUrl, opts) {
     if (!r.ok) { toast('Cloud HTTP ' + r.status, 'err'); return; }
     const j = await r.json();
     if (!j.ok) { toast('Cloud: ' + (j.error || 'unknown'), 'err'); return; }
+    const successMsg = {
+      addWpis: 'Dodano',
+      updateWpis: 'Zapisano',
+      deleteWpis: 'Usunięto',
+      addTemplate: 'Dodano stałą',
+      updateTemplate: 'Zapisano stałą',
+      deleteTemplate: 'Usunięto stałą',
+    }[payload.action];
+    if (successMsg) toast(successMsg);
     return r;
   } catch (e) {
     toast('Cloud error: ' + e.message, 'err');
