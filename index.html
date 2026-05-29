@@ -568,6 +568,10 @@ const EMPTY_EDITS = { added: [], updated: {}, deleted: [], templates: {}, addedT
 
 async function loadData() {
   document.body.classList.add('fonts-loading');
+  // Zawsze startuj na bieżącym miesiącu — nie ma persystencji mi/yr (celowo)
+  const today = new Date();
+  STATE.yr = today.getFullYear();
+  STATE.mi = today.getMonth() + 1;
   // Restore dataMode + cloudToken z localStorage zanim cokolwiek
   const dm = localStorage.getItem('dataMode');
   if (dm === 'local' || dm === 'cloud') STATE.dataMode = dm;
@@ -1007,23 +1011,24 @@ function updateTemplate(id, patch) {
 }
 
 // ============== VIEWS ==============
+function renderEmptyMonth() {
+  const ghostsCount = getMissingStaleTemplates().length;
+  return el('div', { style: 'padding:120px 32px 40px;text-align:center;min-height:60vh;display:flex;flex-direction:column;justify-content:center;align-items:center' }, [
+    el('div', { class: 'big-h', style: 'font-size:64px;line-height:1;color:var(--border);margin-bottom:18px' }, [ML_FULL[STATE.mi - 1]]),
+    el('div', { style: 'font-size:14px;color:var(--muted);margin-bottom:6px' }, [`${STATE.yr}`]),
+    el('div', { style: 'font-size:13px;color:var(--muted-2);margin-bottom:42px;max-width:280px' }, [
+      `Brak danych dla tego miesiąca. Kliknij aby dodać ${ghostsCount} Stał${ghostsCount === 1 ? 'y' : 'ych'} wydatk${ghostsCount === 1 ? '' : 'ów'} z templates.`,
+    ]),
+    el('button', {
+      class: 'big-cta',
+      onclick: () => materializeMonth(),
+    }, [`+ Dodaj miesiąc ${ML_FULL[STATE.mi - 1]} ${String(STATE.yr).slice(2)}`]),
+  ]);
+}
+
 function renderHome() {
   // Empty state — miesiąc bez żadnych wpisów (fallback; normalnie niedostępny przez nav, tylko jeśli user trafi inaczej)
-  const monthWpisy = getMonthWpisy();
-  if (monthWpisy.length === 0) {
-    const ghostsCount = getMissingStaleTemplates().length;
-    return el('div', { style: 'padding:120px 32px 40px;text-align:center;min-height:60vh;display:flex;flex-direction:column;justify-content:center;align-items:center' }, [
-      el('div', { class: 'big-h', style: 'font-size:64px;line-height:1;color:var(--border);margin-bottom:18px' }, [ML_FULL[STATE.mi - 1]]),
-      el('div', { style: 'font-size:14px;color:var(--muted);margin-bottom:6px' }, [`${STATE.yr}`]),
-      el('div', { style: 'font-size:13px;color:var(--muted-2);margin-bottom:42px;max-width:280px' }, [
-        `Brak danych dla tego miesiąca. Kliknij aby dodać ${ghostsCount} Stał${ghostsCount === 1 ? 'y' : 'ych'} wydatk${ghostsCount === 1 ? '' : 'ów'} z templates.`,
-      ]),
-      el('button', {
-        class: 'big-cta',
-        onclick: () => materializeMonth(),
-      }, [`+ Dodaj miesiąc ${ML_FULL[STATE.mi - 1]} ${String(STATE.yr).slice(2)}`]),
-    ]);
-  }
+  if (getMonthWpisy().length === 0) return renderEmptyMonth();
 
   const out = sumOut();
   const income = sumIn();
@@ -1167,6 +1172,7 @@ function renderHome() {
 }
 
 function renderPlan() {
+  if (getMonthWpisy().length === 0) return renderEmptyMonth();
   const sum = sumOut();
   const planSum = planTotal();
   const pctTotal = planSum > 0 ? Math.round((sum / planSum) * 100) : 0;
@@ -1337,6 +1343,8 @@ function ichip(txt, iconSvg, active, onclick, variant = '') {
 }
 
 function renderTrans() {
+  if (getMonthWpisy().length === 0) return renderEmptyMonth();
+
   const isUnpaid = STATE.filter === '__unpaid';
   let wpisy = getMonthWpisy();
 
@@ -1427,6 +1435,7 @@ function txRow(w) {
 }
 
 function renderCharts() {
+  if (getMonthWpisy().length === 0) return renderEmptyMonth();
   const cat = STATE.chartCat;
   // Zakres miesięcy wg STATE.chartZakres
   const monthsCount = { '0.5': 6, '1': 12, '2': 24, 'all': null }[STATE.chartZakres] || 12;
@@ -1753,9 +1762,10 @@ function onPointerDown(e) {
   if (e.button !== undefined && e.button > 0) return;
   // Nie obsługuj swipe gdy otwarty modal/sheet/picker
   if (document.querySelector('.sheet.show, .mpicker.show, .mp-bg.show, .modal-bg.show')) return;
-  // Nie startuj z inputów/przycisków (klik tam ma działać normalnie)
+  // Nie startuj z inputów (klik tam ma działać normalnie). Buttony OK —
+  // przeglądarka i tak nie odpali click jeśli wskaźnik się znacznie przesunął.
   const tag = (e.target.tagName || '').toLowerCase();
-  if (['input','textarea','select','button'].includes(tag)) return;
+  if (['input','textarea','select'].includes(tag)) return;
   swipe = { x0: e.clientX, y0: e.clientY, active: false, started: false };
 }
 
