@@ -497,6 +497,50 @@ function toast(msg, type = 'ok') {
   }, 2500);
 }
 
+// Po sukcesie cloud mutacji — aktualizuj STATE.data + localStorage cache,
+// czyść odpowiadające localEdits (przesuwa optimistic edit do canonical state).
+// Dzięki temu kolejne loadData() porówna cache == fresh → "Aktualne" zamiast re-render.
+function applyMutationToCache(action, payload) {
+  if (!STATE.data) return;
+  if (action === 'addWpis') {
+    STATE.data.wpisy.push(payload.wpis);
+    const i = STATE.localEdits.added.findIndex(w => w.id === payload.wpis.id);
+    if (i >= 0) STATE.localEdits.added.splice(i, 1);
+  } else if (action === 'updateWpis') {
+    const w = STATE.data.wpisy.find(x => x.id === payload.id);
+    if (w) Object.assign(w, payload.patch);
+    if (STATE.localEdits.updated) delete STATE.localEdits.updated[payload.id];
+  } else if (action === 'deleteWpis') {
+    STATE.data.wpisy = STATE.data.wpisy.filter(w => w.id !== payload.id);
+    const i = STATE.localEdits.added.findIndex(w => w.id === payload.id);
+    if (i >= 0) STATE.localEdits.added.splice(i, 1);
+    if (STATE.localEdits.deleted) STATE.localEdits.deleted = STATE.localEdits.deleted.filter(id => id !== payload.id);
+  } else if (action === 'addTemplate') {
+    STATE.data.templates.push(payload.template);
+    if (STATE.localEdits.addedTemplates) {
+      const i = STATE.localEdits.addedTemplates.findIndex(t => t.id === payload.template.id);
+      if (i >= 0) STATE.localEdits.addedTemplates.splice(i, 1);
+    }
+  } else if (action === 'updateTemplate') {
+    const t = STATE.data.templates.find(x => x.id === payload.id);
+    if (t) Object.assign(t, payload.patch);
+    if (STATE.localEdits.templates) delete STATE.localEdits.templates[payload.id];
+  } else if (action === 'deleteTemplate') {
+    STATE.data.templates = STATE.data.templates.filter(t => t.id !== payload.id);
+    if (STATE.localEdits.addedTemplates) {
+      const i = STATE.localEdits.addedTemplates.findIndex(t => t.id === payload.id);
+      if (i >= 0) STATE.localEdits.addedTemplates.splice(i, 1);
+    }
+  } else if (action === 'bulkAddWpis') {
+    STATE.data.wpisy.push(...payload.wpisy);
+    payload.wpisy.forEach(w => {
+      const i = STATE.localEdits.added.findIndex(x => x.id === w.id);
+      if (i >= 0) STATE.localEdits.added.splice(i, 1);
+    });
+  }
+  try { localStorage.setItem('cloudCache', JSON.stringify(STATE.data)); } catch (_) {}
+}
+
 // Mobile keyboard fix: --vvh = wysokość visual viewport (klawiatura skraca)
 function updateVvh() {
   const h = (window.visualViewport ? window.visualViewport.height : window.innerHeight);
@@ -685,6 +729,7 @@ async function cloudCall(localUrl, opts) {
       deleteTemplate: 'Usunięto stałą',
     }[payload.action];
     if (successMsg) toast(successMsg);
+    applyMutationToCache(payload.action, payload);
     return r;
   } catch (e) {
     toast('Cloud error: ' + e.message, 'err');
@@ -818,6 +863,7 @@ async function materializeMonth(yr = STATE.yr, mi = STATE.mi) {
       });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error || 'bulk failed');
+      applyMutationToCache('bulkAddWpis', { wpisy: newWpisy });
       toast('Utworzono ' + newWpisy.length + ' Stałych');
     } catch (e) {
       toast('Bulk error: ' + e.message + ' — rollback', 'err');
