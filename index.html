@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#FFE600">
 <title>Budżet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Anton&display=swap">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Anton&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 <script src="/xlsx.min.js" defer></script>
@@ -209,7 +212,16 @@ const STATE = {
   chartZakres: '1',     // Wykresy zakres: '0.5' | '1' | '2' | 'all' (pół roku/rok/2 lata/całość)
   tlBucket: '3mc',      // Timeline bucket: '3mc' | '6mc' | 'rok'
   tlZakres: '2',        // Timeline zakres: '1' | '2' | '3' | 'all' (lata wstecz)
-  tlHiddenCats: {},     // Timeline ukryte kategorie {kat: true}
+  uiHiddenCatsHist: {},  // Historia: ukryte kategorie {kat: true}
+  uiHiddenCatsTrans: {}, // Transakcje: ukryte kategorie (niezależne od Historii)
+  uiHiddenCatsHome: {},  // Home: ukryte kategorie (filtruje Stałe/Naduch/Alerty) — nieużywane obecnie
+  uiHiddenCatsPlan: {},  // Plan: ukryte kategorie (filtruje listę CATS) — nieużywane obecnie
+  uiDisplayHome: 'grid3',  // tryb kafli per view — osobny dla każdej
+  uiDisplayTrans: 'grid3',
+  uiDisplayHist: 'grid3',
+  uiDisplayCharts: 'line',  // 'line' | 'bars' | 'heatmap'
+  uiDisplayPlan: 'list',   // 'list' | 'bar' | 'donut' — Plan ma własny zestaw
+  uiOpenDrawer: null,   // null | 'zakres' | 'kategorie' | 'widok' — który drawer kontrolek jest otwarty
   tlShowAllCats: false, // Timeline: rozwiń pełną siatkę kategorii w legendzie
   // Settings
   themeMode: 'light', // 'auto' | 'light' | 'dark' — domyślnie dzień
@@ -659,6 +671,31 @@ async function loadData() {
     const v = localStorage.getItem(k);
     if (v !== null) STATE[k] = v === 'true';
   });
+  // Display mode per view — osobne klucze; fallback: stary 'uiDisplay' → wszystkie 3 widoki
+  const legacyDisp = localStorage.getItem('uiDisplay');
+  const isValidDisp = v => v === 'list' || v === 'grid2' || v === 'grid3';
+  ['Home', 'Trans', 'Hist'].forEach(view => {
+    const v = localStorage.getItem('uiDisplay' + view) || legacyDisp;
+    if (isValidDisp(v)) STATE['uiDisplay' + view] = v;
+  });
+  // Plan ma własny zestaw opcji (list/bar/donut)
+  const planD = localStorage.getItem('uiDisplayPlan');
+  if (planD === 'list' || planD === 'bar' || planD === 'donut') STATE.uiDisplayPlan = planD;
+  // Charts ma własny: line/bars/heatmap (default = line)
+  STATE.uiDisplayCharts = 'line';
+  const chartD = localStorage.getItem('uiDisplayCharts');
+  if (chartD === 'line' || chartD === 'bars' || chartD === 'heatmap') STATE.uiDisplayCharts = chartD;
+  const tlZ = localStorage.getItem('tlZakres');
+  if (tlZ === '1' || tlZ === '2' || tlZ === '3' || tlZ === 'all') STATE.tlZakres = tlZ;
+  // Hist/Trans hidden cats — osobne klucze; fallback: stary 'uiHiddenCats' → Historia
+  const hcH = localStorage.getItem('uiHiddenCatsHist') || localStorage.getItem('uiHiddenCats');
+  if (hcH) { try { STATE.uiHiddenCatsHist = JSON.parse(hcH) || {}; } catch (_) {} }
+  const hcT = localStorage.getItem('uiHiddenCatsTrans');
+  if (hcT) { try { STATE.uiHiddenCatsTrans = JSON.parse(hcT) || {}; } catch (_) {} }
+  const hcHm = localStorage.getItem('uiHiddenCatsHome');
+  if (hcHm) { try { STATE.uiHiddenCatsHome = JSON.parse(hcHm) || {}; } catch (_) {} }
+  const hcP = localStorage.getItem('uiHiddenCatsPlan');
+  if (hcP) { try { STATE.uiHiddenCatsPlan = JSON.parse(hcP) || {}; } catch (_) {} }
   const tm = localStorage.getItem('themeMode');
   if (tm === 'auto' || tm === 'light' || tm === 'dark') STATE.themeMode = tm;
   applyTheme();
@@ -667,6 +704,8 @@ async function loadData() {
     await document.fonts.ready;
   }
   document.body.classList.remove('fonts-loading');
+  // Settings UI sync — STATE jest dopiero teraz załadowany z localStorage
+  if (typeof syncSettingsUi === 'function') syncSettingsUi();
   render();
 }
 
@@ -1039,7 +1078,10 @@ function renderHome() {
   const naduch = getNadchodzaceWpisy().filter(w => w.miesiac === STATE.mi);
   const alerts = getAlerts().slice(0, 6);
 
+  const homeDisp = STATE.uiDisplayHome;
+  // grid3 = kompakt z /planned (homowa specyfika); list/grid2 = wspólny renderRow z Trans/Hist
   const renderTile = (w) => {
+    if (homeDisp !== 'grid3') return renderRow(w, () => openLightbox(w), homeDisp);
     const tpl = getTemplate(w.template_id);
     const szacunek = getSzacunek(w);
     const paid = w.kwota > 0;
@@ -1055,17 +1097,20 @@ function renderHome() {
     ]);
   };
 
-  const renderAlertTile = (w) => el('div', {
-    class: 'mini-tile anom',
-    onclick: () => openTimelineDetail({ ...w, kind: 'alert', srcYr: w.rok }),
-    style: 'cursor:pointer',
-  }, [
-    el('div', { class: 'n' }, [
-      el('span', { style: 'color:var(--muted);font-weight:800;margin-right:4px' }, [`'${String(w.rok).slice(2)}`]),
-      w.nazwa,
-    ]),
-    el('div', { class: 'a' }, [fmtAmt(Math.abs(w.kwota))]),
-  ]);
+  const renderAlertTile = (w) => {
+    if (homeDisp !== 'grid3') return renderRow(w, () => openTimelineDetail({ ...w, kind: 'alert', srcYr: w.rok }), homeDisp);
+    return el('div', {
+      class: 'mini-tile anom',
+      onclick: () => openTimelineDetail({ ...w, kind: 'alert', srcYr: w.rok }),
+      style: 'cursor:pointer',
+    }, [
+      el('div', { class: 'n' }, [
+        el('span', { style: 'color:var(--muted);font-weight:800;margin-right:4px' }, [`'${String(w.rok).slice(2)}`]),
+        w.nazwa,
+      ]),
+      el('div', { class: 'a' }, [fmtAmt(Math.abs(w.kwota))]),
+    ]);
+  };
 
   const addBtn = (tryb) => el('button', {
     class: 'sec-add',
@@ -1075,8 +1120,13 @@ function renderHome() {
 
   const sections = [];
 
+  // Helper: mini-grid klasa per uiDisplayHome
+  const mgClass = STATE.uiDisplayHome === 'list' ? 'mini-grid disp-list'
+    : STATE.uiDisplayHome === 'grid2' ? 'mini-grid disp-grid2'
+    : 'mini-grid';
+
   // Hero: wolny budżet
-  sections.push(el('div', { style: 'padding:48px 24px 0' }, [
+  sections.push(el('div', { style: 'padding:36px 24px 0' }, [
     el('div', { class: 'caps-i hero-anim', style: 'margin-bottom:14px' }, ['Wolny budżet']),
     el('div', { class: 'anton num hero-anim', style: `font-size:88px;line-height:1;letter-spacing:-3px;color:${free < 0 ? 'var(--danger)' : 'var(--fg)'}` },
       [(free < 0 ? '−' : '') + fmtAmt(free)]),
@@ -1092,6 +1142,13 @@ function renderHome() {
         el('div', { class: 'caps-i', style: 'font-size:8px;margin-bottom:3px' }, ['Przychody']),
         el('div', { style: 'font-size:13px;color:var(--muted);font-weight:600' }, [fmtAmt(income)]),
       ]),
+    ]),
+  ]));
+
+  // Display switch standalone (Home nie potrzebuje kategorii)
+  sections.push(el('div', { class: 'ctrl-host' }, [
+    el('div', { class: 'ctrl-bar', style: 'justify-content:flex-end' }, [
+      renderDispSwitch('uiDisplayHome', 'uiDisplayHome'),
     ]),
   ]));
 
@@ -1125,12 +1182,9 @@ function renderHome() {
     // Kolejność: niezapł realne + ghosty (wszystko k=0) na górze, zapłacone na dole, addTile na końcu
     const unpaidReal = staleSorted.filter(w => w.kwota === 0);
     const paidReal = staleSorted.filter(w => w.kwota > 0);
-    sections.push(el('div', { style: 'padding:42px 24px 0' }, [
-      el('div', { class: 'hero-anim', style: 'display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px' }, [
-        el('div', { class: 'caps-i' }, [`Stałe · ${ML_FULL[STATE.mi - 1]}`]),
-        el('div', { class: 'caps-i num', style: 'font-size:10px;color:var(--success)' }, [`${paid}/${total} zapł`]),
-      ]),
-      el('div', { class: 'mini-grid' }, [
+    sections.push(el('div', { style: 'padding:24px 24px 0' }, [
+      el('div', { class: 'caps-i hero-anim', style: 'margin-bottom:14px' }, [`Stałe · ${ML_FULL[STATE.mi - 1]}`]),
+      el('div', { class: mgClass }, [
         ...unpaidReal.map(renderTile),
         ...ghosts.map(renderGhost),
         ...paidReal.map(renderTile),
@@ -1152,19 +1206,19 @@ function renderHome() {
       onclick: () => openAddModal('nadchodzace', true),
       title: 'Dodaj nowy Nadchodzący',
     }, ['+']);
-    sections.push(el('div', { style: 'padding:42px 24px 0' }, [
+    sections.push(el('div', { style: 'padding:24px 24px 0' }, [
       el('div', { class: 'hero-anim', style: 'margin-bottom:14px' }, [
         el('div', { class: 'caps-i' }, [`Nadchodzące · ${STATE.yr}`]),
       ]),
-      el('div', { class: 'mini-grid' }, [...naduchSorted.map(renderTile), addTileN]),
+      el('div', { class: mgClass }, [...naduchSorted.map(renderTile), addTileN]),
     ]));
   }
 
   // Sekcja Alerty (historia 2 lat)
   if (alerts.length) {
-    sections.push(el('div', { style: 'padding:42px 24px 0' }, [
+    sections.push(el('div', { style: 'padding:24px 24px 0' }, [
       el('div', { class: 'caps-i hero-anim', style: 'margin-bottom:14px' }, [`Alerty · ${ML_FULL[STATE.mi - 1]} (2 lata wstecz)`]),
-      el('div', { class: 'mini-grid' }, alerts.map(renderAlertTile)),
+      el('div', { class: mgClass }, alerts.map(renderAlertTile)),
     ]));
   }
 
@@ -1177,10 +1231,27 @@ function renderPlan() {
   const planSum = planTotal();
   const pctTotal = planSum > 0 ? Math.round((sum / planSum) * 100) : 0;
 
+  const mode = STATE.uiDisplayPlan;
+  let tiles;
+  if (mode === 'bar') {
+    tiles = el('div', { class: 'plan-grid-2' }, CATS.map(k => planBarTile(k)));
+  } else if (mode === 'donut') {
+    // Donut = 3 kol, bez kafelków — same kółka + tekst pod spodem
+    tiles = el('div', { class: 'plan-grid-donut' }, CATS.map(k => planDonutTile(k)));
+  } else {
+    // list (default) — current planRow
+    tiles = el('div', {}, CATS.map(k => planRow(k)));
+  }
+
   return el('div', {}, [
-    el('div', { style: 'padding:22px 24px 18px' }, [el('div', { class: 'big-h' }, ['Plan'])]),
-    el('div', { style: 'padding:0 24px' }, [
-      ...CATS.map(k => planRow(k)),
+    el('div', { style: 'padding:36px 24px 18px' }, [el('div', { class: 'big-h' }, ['Plan'])]),
+    el('div', { class: 'ctrl-host' }, [
+      el('div', { class: 'ctrl-bar', style: 'justify-content:flex-end' }, [
+        renderDispSwitch('uiDisplayPlan', 'uiDisplayPlan', DISP_OPTS_PLAN),
+      ]),
+    ]),
+    el('div', { style: 'padding:28px 24px 0' }, [
+      tiles,
       el('div', { class: 'pr-sum' }, [
         el('div', {}, [
           el('div', { class: 'l' }, ['Suma wydatków']),
@@ -1252,18 +1323,18 @@ function renderPlanEditBody() {
   body.appendChild(sumDiv);
   body.appendChild(el('div', { id: 'plan-mismatch', style: 'margin-top:10px;text-align:center;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--danger-2);display:none' }, ['']));
 
-  // Foot — bez border-radius, kwadratowe
+  // Foot — kwadratowe, styl spójny z DODAJ
   foot.appendChild(el('div', { style: 'display:flex;gap:8px' }, [
     el('button', {
       id: 'plan-save-one', class: 'plan-save',
-      style: 'flex:1;padding:16px;background:var(--card);border:1px solid var(--fg);color:var(--fg);cursor:pointer;font-family:inherit;font-weight:700;font-size:13px;letter-spacing:0.5px;border-radius:8px',
+      style: 'flex:1;background:transparent;border:2px solid var(--fg);color:var(--fg);cursor:pointer;padding:18px;font-family:Anton;font-size:22px;letter-spacing:-0.5px',
       onclick: () => savePlanEdit('this'),
-    }, ['Bieżący miesiąc']),
+    }, ['TEN MIESIĄC']),
     el('button', {
       id: 'plan-save-all', class: 'plan-save',
-      style: 'flex:1;padding:16px;background:var(--accent);border:none;color:var(--accent-fg);cursor:pointer;font-family:inherit;font-weight:800;font-size:13px;letter-spacing:0.5px;border-radius:8px',
+      style: 'flex:1;background:var(--accent);color:var(--accent-fg);border:none;padding:18px;font-family:Anton;font-size:22px;letter-spacing:-0.5px;cursor:pointer',
       onclick: () => savePlanEdit('all'),
-    }, ['Na stałe']),
+    }, ['NA STAŁE']),
   ]));
 
   updateSumDisplay();
@@ -1332,6 +1403,49 @@ function planRow(kat) {
   ]);
 }
 
+// Plan: bar-centryczny kafelek (2 kol) — struktura jak Home grid2 (tile-mid)
+// Layout: nazwa top-left, kwota Anton top-right, /limit+% bottom-left, cienki pasek bottom-right
+function planBarTile(kat) {
+  const actual = sumCat(kat);
+  const plan = getPlan(kat);
+  const pct = plan > 0 ? Math.round((actual / plan) * 100) : 0;
+  const empty = actual === 0 && plan === 0;
+  const cls = 'plan-tile bar' + (empty ? ' empty' : '') + (pct >= 100 ? ' over' : pct >= 80 ? ' warn' : '');
+  const subText = plan > 0 ? `/${fmt(plan)} · ${pct}%` : '—';
+  return el('div', { class: cls, onclick: () => openPlanEdit() }, [
+    el('div', { class: 'plan-tile-nm' }, [kat]),
+    el('div', { class: 'plan-tile-v num' }, [actual > 0 ? fmtAmt(actual) : '—']),
+    el('div', { class: 'plan-tile-sub' }, [subText]),
+    el('div', { class: 'plan-tile-bar' }, [el('div', { style: `width:${Math.min(100, pct)}%` })]),
+  ]);
+}
+
+// Plan: donut-only (2 kol) — bez kafelka, donut wyśrodkowany, tekst pod spodem, lekki font
+function planDonutTile(kat) {
+  const actual = sumCat(kat);
+  const plan = getPlan(kat);
+  const pct = plan > 0 ? Math.round((actual / plan) * 100) : 0;
+  const empty = actual === 0 && plan === 0;
+  const cls = 'plan-donut' + (empty ? ' empty' : '') + (pct >= 100 ? ' over' : pct >= 80 ? ' warn' : '');
+  const r = 14;
+  const c = 2 * Math.PI * r;
+  const dash = (c * Math.min(100, pct)) / 100;
+  // % bez bold, Inter regular, mniejszy
+  const donutHtml = `<svg viewBox="0 0 36 36" width="76" height="76">
+    <circle cx="18" cy="18" r="${r}" fill="none" stroke="var(--surface-3)" stroke-width="1.4"/>
+    <circle cx="18" cy="18" r="${r}" fill="none" stroke="var(--donut-fg, var(--fg))" stroke-width="1.4"
+            stroke-dasharray="${dash} ${c}" stroke-linecap="round"
+            transform="rotate(-90 18 18)"/>
+    <text x="18" y="21" text-anchor="middle" font-size="8" font-weight="500" fill="var(--fg)" font-family="Inter" letter-spacing="0.3">${plan > 0 ? pct + '%' : '—'}</text>
+  </svg>`;
+  return el('div', { class: cls, onclick: () => openPlanEdit() }, [
+    el('div', { class: 'plan-donut-svg', html: donutHtml }),
+    el('div', { class: 'plan-donut-nm' }, [kat]),
+    el('div', { class: 'plan-donut-amt num' }, [actual > 0 ? fmtAmt(actual) : '—']),
+    el('div', { class: 'plan-donut-limit' }, [`/ ${plan > 0 ? fmt(plan) : '0'}`]),
+  ]);
+}
+
 function ichip(txt, iconSvg, active, onclick, variant = '') {
   return el('span', {
     class: 'ichip ' + (active ? 'active ' + variant : ''),
@@ -1345,22 +1459,19 @@ function ichip(txt, iconSvg, active, onclick, variant = '') {
 function renderTrans() {
   if (getMonthWpisy().length === 0) return renderEmptyMonth();
 
-  const isUnpaid = STATE.filter === '__unpaid';
   let wpisy = getMonthWpisy();
+  // Wszystko pokazujemy — wpisy z kwota=0 to "niezapłacone" stałe (widoczne na liście)
+  // Filtr kategorii — osobny stan dla Trans (niezależny od Historii)
+  wpisy = wpisy.filter(w => !STATE.uiHiddenCatsTrans[w.kategoria]);
 
-  if (isUnpaid) {
-    wpisy = wpisy.filter(w => w.kwota === 0);
-  } else {
-    if (STATE.filter) {
-      wpisy = wpisy.filter(w => w.kategoria === STATE.filter);
-    }
-    // Domyślnie ukryj kwota=0 (placeholdery)
-    wpisy = wpisy.filter(w => w.kwota !== 0);
-  }
-
-  // Sort: stale → nadchodzace → transakcja, w obrębie typu po kwocie malejąco
+  // Sort: niezapłacone (k=0) na samą górę → potem stale → nadchodzace → transakcja → kwota desc
   const typOrder = { stale: 0, nadchodzace: 1, transakcja: 2 };
-  wpisy.sort((a, b) => (typOrder[a.typ] - typOrder[b.typ]) || (Math.abs(b.kwota) - Math.abs(a.kwota)));
+  wpisy.sort((a, b) => {
+    const aUnp = a.kwota === 0 ? 0 : 1;
+    const bUnp = b.kwota === 0 ? 0 : 1;
+    if (aUnp !== bUnp) return aUnp - bUnp;
+    return (typOrder[a.typ] - typOrder[b.typ]) || (Math.abs(b.kwota) - Math.abs(a.kwota));
+  });
 
   const sumOut2 = wpisy.filter(w => w.kierunek === 'wydatek').reduce((s,w) => s + Math.abs(w.kwota), 0);
   const sumIn2 = wpisy.filter(w => w.kierunek === 'przychod').reduce((s,w) => s + Math.abs(w.kwota), 0);
@@ -1374,30 +1485,23 @@ function renderTrans() {
     el('span', { style: 'font-size:13px;font-weight:500;letter-spacing:0.3px;color:var(--muted-2)' }, ['Dodaj transakcję']),
   ]);
 
+  // Kontrolki — bez Zakresu (Trans = jeden miesiąc), własny slot kategorii i display
+  const { trigBar, drawer } = renderCtrlBar({ withZakres: false, hcKey: 'uiHiddenCatsTrans', lsKey: 'uiHiddenCatsTrans', dispKey: 'uiDisplayTrans', dispLsKey: 'uiDisplayTrans' });
+
+  // Grid wrapper class — wybór layoutu pod uiDisplayTrans
+  const transDisp = STATE.uiDisplayTrans;
+  const gridClass = transDisp === 'list' ? 'tl-body-list'
+    : transDisp === 'grid2' ? 'tl-body-grid2'
+    : 'tl-body-grid3';
+
   return el('div', {}, [
-    el('div', { style: 'padding:22px 24px 0' }, [el('div', { class: 'big-h' }, ['Transakcje'])]),
-    el('div', { style: 'padding:28px 24px 0' }, [
-      el('div', { class: 'ichips-wrap' }, (() => {
-        const showAll = STATE.transShowAll;
-        const restCats = CATS.filter(k => k !== 'Firma' && k !== 'Nela');
-        const chips = [
-          ichip('Wszystkie', '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/>', !STATE.filter, () => { STATE.filter = null; render(); }),
-          ichip('Niezapł.', '<path d="M7 4h10M7 20h10M8 5l8 14M16 5L8 19"/>', isUnpaid, () => { STATE.filter = isUnpaid ? null : '__unpaid'; render(); }, 'ylw'),
-          ichip('Firma', catIcon('Firma'), STATE.filter === 'Firma', () => { STATE.filter = STATE.filter === 'Firma' ? null : 'Firma'; render(); }),
-          ichip('Nela', catIcon('Nela'), STATE.filter === 'Nela', () => { STATE.filter = STATE.filter === 'Nela' ? null : 'Nela'; render(); }),
-        ];
-        if (showAll) {
-          restCats.forEach(k => chips.push(ichip(k.split(' ')[0], catIcon(k), STATE.filter === k, () => { STATE.filter = STATE.filter === k ? null : k; render(); })));
-          chips.push(ichip('Mniej', '<path d="M18 15l-6-6-6 6"/>', false, () => { STATE.transShowAll = false; render(); }));
-        } else {
-          chips.push(ichip('Więcej', '<circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/>', false, () => { STATE.transShowAll = true; render(); }));
-        }
-        return chips;
-      })()),
-    ]),
+    el('div', { style: 'padding:36px 24px 14px' }, [el('div', { class: 'big-h' }, ['Transakcje'])]),
+    el('div', { class: 'ctrl-host' }, [trigBar, drawer].filter(Boolean)),
     el('div', { style: 'padding:14px 24px 0' }, [
       addTile,
-      ...(wpisy.length ? wpisy.map(txRow) : [el('div', { style: 'padding:24px 0;text-align:center;color:var(--muted);font-size:13px' }, [isUnpaid ? 'Brak placeholderów' : 'Brak transakcji'])]),
+      wpisy.length
+        ? el('div', { class: gridClass, style: 'margin-top:24px' }, wpisy.map(w => renderRow(w, undefined, transDisp)))
+        : el('div', { style: 'padding:24px 0;text-align:center;color:var(--muted);font-size:13px' }, ['Brak transakcji']),
       wpisy.length ? el('div', { class: 'pr-sum' }, [
         el('div', {}, [
           el('div', { class: 'l' }, ['Suma']),
@@ -1409,7 +1513,7 @@ function renderTrans() {
   ]);
 }
 
-function txRow(w) {
+function txRow(w, onClick) {
   const isIn = w.kierunek === 'przychod';
   const anom = w.anomalia === true;
   const heart = w.dzielony === true;
@@ -1419,7 +1523,8 @@ function txRow(w) {
   // Typ badge dla Stałych/Nadchodzących
   if (w.typ === 'stale') badges.push(el('span', { class: 'tag stale-tag', title: 'Stały co miesiąc' }, ['STAŁY']));
   if (w.typ === 'nadchodzace') badges.push(el('span', { class: 'tag nadch-tag', title: 'Nadchodzący' }, ['NADCH']));
-  return el('div', { class: 'tx-row', onclick: () => openLightbox(w) }, [
+  const unpaidCls = w.kwota === 0 ? ' unpaid' : '';
+  return el('div', { class: 'tx-row' + unpaidCls, onclick: typeof onClick === 'function' ? onClick : () => openLightbox(w) }, [
     el('div', { class: 'left' }, [
       el('div', { class: 'ic-cat', html: `<svg viewBox="0 0 24 24">${catIcon(w.kategoria)}</svg>` }),
       el('div', { class: 'info' }, [
@@ -1437,87 +1542,202 @@ function txRow(w) {
 function renderCharts() {
   if (getMonthWpisy().length === 0) return renderEmptyMonth();
   const cat = STATE.chartCat;
-  // Zakres miesięcy wg STATE.chartZakres
-  const monthsCount = { '0.5': 6, '1': 12, '2': 24, 'all': null }[STATE.chartZakres] || 12;
-  let N;
-  if (monthsCount === null) {
-    const bounds = getDataBounds();
-    if (bounds) {
-      const cur = STATE.yr * 12 + STATE.mi;
-      N = Math.max(1, cur - bounds.min + 1);
-    } else { N = 12; }
-  } else { N = monthsCount; }
-  const points = [];
-  const now = new Date(STATE.yr, STATE.mi - 1, 1);
-  for (let i = N - 1; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    points.push({
-      yr: d.getFullYear(),
-      mi: d.getMonth() + 1,
-      val: sumCat(cat, d.getFullYear(), d.getMonth() + 1),
-    });
+  const mode = STATE.uiDisplayCharts;
+
+  // === Kontrolki: 2 dropdowny (Zakres, Kategoria) + display switch — zawsze te same ===
+  const zakresLabels = { '0.5': 'pół roku', '1': 'rok', '2': '2 lata', 'all': 'całość' };
+  const trig = (key, label, val) => el('div', {
+    class: 'ctrl-trig' + (STATE.uiOpenDrawer === key ? ' on' : ''),
+    onclick: () => { STATE.uiOpenDrawer = STATE.uiOpenDrawer === key ? null : key; render(); },
+  }, [
+    el('div', { class: 'l' }, [
+      el('div', { class: 'lbl' }, [label]),
+      el('div', { class: 'val' }, [val]),
+    ]),
+    el('span', { class: 'chev', html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>' }),
+  ]);
+  const trigBar = el('div', { class: 'ctrl-bar' }, [
+    trig('chartZakres', 'Zakres', zakresLabels[STATE.chartZakres] || STATE.chartZakres),
+    trig('chartCat', 'Kategoria', STATE.chartCat),
+    renderDispSwitch('uiDisplayCharts', 'uiDisplayCharts', DISP_OPTS_CHARTS),
+  ]);
+  const drawerWrap = (children) => el('div', {}, [
+    el('div', { class: 'ctrl-bd', onclick: () => { STATE.uiOpenDrawer = null; render(); } }),
+    el('div', { class: 'ctrl-dr' }, children),
+  ]);
+  const drawerHead = (title) => el('div', { class: 'ctrl-dr-h' }, [
+    el('span', { class: 'lbl' }, [title]),
+    el('div', { class: 'x', onclick: () => { STATE.uiOpenDrawer = null; render(); } }, ['×']),
+  ]);
+  let drawer = null;
+  if (STATE.uiOpenDrawer === 'chartZakres') {
+    const segBtn = (label, val) => el('button', {
+      class: 'ctrl-seg' + (STATE.chartZakres === val ? ' on' : ''),
+      onclick: () => { STATE.chartZakres = val; STATE.uiOpenDrawer = null; render(); },
+    }, [label]);
+    drawer = drawerWrap([
+      drawerHead('Zakres czasowy'),
+      el('div', { class: 'ctrl-seg-row' }, [
+        segBtn('pół roku', '0.5'),
+        segBtn('rok', '1'),
+        segBtn('2 lata', '2'),
+        segBtn('całość', 'all'),
+      ]),
+    ]);
+  } else if (STATE.uiOpenDrawer === 'chartCat') {
+    // Single-select: wybrana = pełna opacity, reszta przygaszona (.off)
+    drawer = drawerWrap([
+      drawerHead('Kategoria (klik = wybierz)'),
+      el('div', { class: 'ctrl-cats' }, CATS.map(k => el('div', {
+        class: 'ctrl-cat' + (STATE.chartCat === k ? '' : ' off'),
+        onclick: () => { STATE.chartCat = k; STATE.uiOpenDrawer = null; render(); },
+      }, [
+        el('span', { class: 'ic', html: `<svg viewBox="0 0 24 24">${catIcon(k)}</svg>` }),
+        el('span', { class: 'nm' }, [k]),
+      ]))),
+    ]);
   }
-  const max = Math.max(...points.map(p => p.val), 100);
-  const yMax = Math.ceil(max / 1000) * 1000;
-  const w = 360, h = 260, padL = 56, padB = 18, padT = 8;
-  const xStep = points.length > 1 ? (w - padL) / (points.length - 1) : 0;
-  const yOf = v => padT + (h - padT - padB) * (1 - v / yMax);
-  const path = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${padL + i * xStep},${yOf(p.val)}`).join(' ');
-  const area = `${path} L${padL + (points.length - 1) * xStep},${h - padB} L${padL},${h - padB} Z`;
-  const last = points[points.length - 1];
 
-  const yTicks = [yMax, yMax * 0.75, yMax * 0.5, yMax * 0.25];
-  // X-ticks adaptacyjne: 5 etykiet dla krótkich, 7 dla dłuższych
-  const maxTicks = points.length > 15 ? 7 : 5;
-  const tickStep = Math.max(1, Math.ceil(points.length / maxTicks));
-  const xTickIdx = [];
-  for (let i = 0; i < points.length; i += tickStep) xTickIdx.push(i);
-  if (xTickIdx[xTickIdx.length - 1] !== points.length - 1) xTickIdx.push(points.length - 1);
-  // Range label
-  const firstP = points[0], lastP = points[points.length - 1];
-  const rangeLabel = `${ML[firstP.mi - 1]} '${String(firstP.yr).slice(2)} → ${ML[lastP.mi - 1]} '${String(lastP.yr).slice(2)} · ${points.length} mc`;
+  // === Branch zawartości chartu po mode ===
+  let chartContent;
+  if (mode === 'heatmap') {
+    chartContent = renderHeatmapChart(cat);
+  } else {
+    // line / bars — wspólne obliczenia points + geometry
+    const monthsCount = { '0.5': 6, '1': 12, '2': 24, 'all': null }[STATE.chartZakres] || 12;
+    let N;
+    if (monthsCount === null) {
+      const bounds = getDataBounds();
+      if (bounds) { N = Math.max(1, STATE.yr * 12 + STATE.mi - bounds.min + 1); } else { N = 12; }
+    } else { N = monthsCount; }
+    const points = [];
+    for (let i = N - 1; i >= 0; i--) {
+      const d = new Date(STATE.yr, STATE.mi - 1 - i, 1);
+      points.push({ yr: d.getFullYear(), mi: d.getMonth() + 1, val: sumCat(cat, d.getFullYear(), d.getMonth() + 1) });
+    }
+    const max = Math.max(...points.map(p => p.val), 100);
+    const yMax = Math.ceil(max / 1000) * 1000;
+    const w = 360, h = 380, padL = 48, padB = 24, padT = 12;
+    const yOf = v => padT + (h - padT - padB) * (1 - v / yMax);
+    const yTicks = [yMax, yMax * 0.75, yMax * 0.5, yMax * 0.25];
+    const maxTicks = points.length > 15 ? 7 : 5;
+    const tickStep = Math.max(1, Math.ceil(points.length / maxTicks));
+    const xTickIdx = [];
+    for (let i = 0; i < points.length; i += tickStep) xTickIdx.push(i);
+    if (xTickIdx[xTickIdx.length - 1] !== points.length - 1) xTickIdx.push(points.length - 1);
+    const yTicksHtml = yTicks.map(v => `<text class="chart-grid" style="fill:var(--muted-4)" x="0" y="${yOf(v) + 3}" font-size="9" font-family="Inter" font-weight="600">${fmt(Math.round(v))} zł</text><line class="chart-grid" style="stroke:var(--surface-3)" x1="${padL}" y1="${yOf(v)}" x2="${w}" y2="${yOf(v)}" stroke-width="1"/>`).join('');
 
-  // Tooltip cache
-  window.__chartState = { points, padL, xStep, yOf, h, padB, fmt };
-
-  const smChip = (label, val) => el('span', {
-    class: 'chip sm ' + (STATE.chartZakres === val ? 'active' : ''),
-    onclick: () => { STATE.chartZakres = val; render(); },
-  }, [label]);
+    if (mode === 'bars') {
+      // === BARS ===
+      const slotW = (w - padL) / points.length;
+      const barW = slotW * 0.7;
+      const xTicksHtml = xTickIdx.map(i => `<text class="chart-xtick" style="fill:var(--muted)" x="${padL + (i + 0.5) * slotW}" y="${h + 14}" font-size="8" font-family="Inter" font-weight="600" text-anchor="middle">${ML[points[i].mi - 1].toUpperCase()}${points.length > 12 ? ` '${String(points[i].yr).slice(2)}` : ''}</text>`).join('');
+      const bars = points.map((p, i) => {
+        const x = padL + (i + 0.5) * slotW - barW / 2;
+        const y = yOf(p.val);
+        const barH = (h - padB) - y;
+        return `<rect class="chart-area" x="${x}" y="${y}" width="${barW}" height="${Math.max(0, barH)}" fill="#FFE600"/>`;
+      }).join('');
+      chartContent = el('div', { class: 'charts-dock', style: 'margin-top:32px;padding:0 16px', html: `
+        <svg viewBox="0 0 ${w} ${h + 4}" width="100%" style="display:block">
+          ${yTicksHtml}
+          ${bars}
+          ${xTicksHtml}
+        </svg>` });
+    } else {
+      // === LINE (default) ===
+      const xStep = points.length > 1 ? (w - padL) / (points.length - 1) : 0;
+      const path = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${padL + i * xStep},${yOf(p.val)}`).join(' ');
+      const area = `${path} L${padL + (points.length - 1) * xStep},${h - padB} L${padL},${h - padB} Z`;
+      const last = points[points.length - 1];
+      const xTicksHtml = xTickIdx.map(i => `<text class="chart-xtick" style="fill:var(--muted)" x="${padL + i * xStep}" y="${h + 14}" font-size="8" font-family="Inter" font-weight="600">${ML[points[i].mi - 1].toUpperCase()}${points.length > 12 ? ` '${String(points[i].yr).slice(2)}` : ''}</text>`).join('');
+      window.__chartState = { points, padL, xStep, yOf, h, padB, fmt };
+      chartContent = el('div', { class: 'charts-dock', style: 'margin-top:32px;padding:0 16px', html: `
+        <svg id="chart-svg" viewBox="0 0 ${w} ${h + 4}" width="100%" style="display:block;touch-action:none">
+          <defs><linearGradient id="g" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#FFE600" stop-opacity="0.7"/><stop offset="100%" stop-color="#FFE600" stop-opacity="0"/></linearGradient></defs>
+          ${yTicksHtml}
+          <path class="chart-area" d="${area}" fill="url(#g)"/>
+          <path class="chart-line" d="${path}" stroke="#FFE600" stroke-width="2.5" fill="none"/>
+          <circle class="chart-dot" cx="${padL + (points.length - 1) * xStep}" cy="${yOf(last.val)}" r="4" style="fill:var(--fg)"/>
+          ${xTicksHtml}
+          <g id="chart-tip" style="display:none;pointer-events:none">
+            <line x1="0" y1="${padT}" x2="0" y2="${h - padB}" style="stroke:var(--fg)" stroke-width="0.6" stroke-dasharray="2 2" opacity="0.35"/>
+            <circle cx="0" cy="0" r="5" style="fill:var(--fg)"/>
+            <text x="0" y="0" font-family="Anton" font-size="15" style="fill:var(--fg)" text-anchor="middle" letter-spacing="-0.4">0</text>
+          </g>
+          <rect x="${padL}" y="0" width="${w - padL}" height="${h}" fill="transparent" style="cursor:crosshair"
+            onpointermove="chartTipMove(event)" onpointerdown="chartTipMove(event)" onpointerleave="chartTipHide()"/>
+        </svg>` });
+    }
+  }
 
   return el('div', { class: 'charts-page' }, [
-    el('div', { style: 'padding:22px 24px 14px' }, [
+    el('div', { style: 'padding:36px 24px 14px' }, [
       el('div', { class: 'big-h' }, ['Wykresy']),
     ]),
-    el('div', { style: 'padding:0 24px 6px;display:flex;align-items:center;gap:6px;flex-wrap:nowrap;justify-content:space-between' }, [
-      smChip('pół roku', '0.5'),
-      smChip('rok', '1'),
-      smChip('2 lata', '2'),
-      smChip('całość', 'all'),
+    el('div', { class: 'ctrl-host' }, [trigBar, drawer].filter(Boolean)),
+    chartContent,
+  ]);
+}
+
+// === HEATMAP: miesiące × lata grid, kolor = intensywność wydatków ===
+function renderHeatmapChart(cat) {
+  const bounds = getDataBounds();
+  if (!bounds) return el('div', { style: 'padding:24px;text-align:center;color:var(--muted);font-size:13px' }, ['Brak danych']);
+  const startMonth = bounds.min; // yr*12 + mi
+  const startYr = Math.floor((startMonth - 1) / 12);
+  const startMi = ((startMonth - 1) % 12) + 1;
+  // jeśli startMi nie 1, to nadal całe lata pokazujemy; pierwsze cells przed startMi będą future-like (puste)
+  const endYr = STATE.yr;
+  const years = [];
+  for (let y = endYr; y >= startYr; y--) years.push(y);
+
+  // Wszystkie wartości żeby policzyć max (dla skali kolorów)
+  let maxVal = 0;
+  const cells = {};
+  years.forEach(y => {
+    cells[y] = [];
+    for (let m = 1; m <= 12; m++) {
+      const v = sumCat(cat, y, m);
+      cells[y].push(v);
+      if (v > maxVal) maxVal = v;
+    }
+  });
+  if (maxVal === 0) maxVal = 1; // avoid div/0
+
+  return el('div', { class: 'heatmap-wrap' }, [
+    el('div', { class: 'heatmap' }, [
+      ...years.map(y => el('div', { class: 'hm-row' }, [
+        el('div', { class: 'hm-yr' }, [`'${String(y).slice(2)}`]),
+        ...cells[y].map((v, idx) => {
+          const mi = idx + 1;
+          const future = y > endYr || (y === endYr && mi > STATE.mi);
+          const beforeData = y * 12 + mi < startMonth;
+          const isCurr = y === STATE.yr && mi === STATE.mi;
+          const intensity = v > 0 ? (0.15 + 0.85 * (v / maxVal)) : 0;
+          const cls = 'hm-cell'
+            + (future ? ' future' : '')
+            + (beforeData ? ' none' : '')
+            + (isCurr ? ' curr' : '')
+            + (v === 0 && !future && !beforeData ? ' zero' : '');
+          return el('div', {
+            class: cls,
+            style: !future && !beforeData ? `--intensity:${intensity}` : '',
+            title: future ? `${ML_FULL[mi - 1]} ${y} (przyszłe)` : `${ML_FULL[mi - 1]} ${y}: ${fmt(Math.round(v))} zł`,
+          });
+        }),
+      ])),
+      el('div', { class: 'hm-row hm-labels' }, [
+        el('div', { class: 'hm-yr' }, []),
+        ...ML.map(m => el('div', { class: 'hm-label' }, [m.toUpperCase()])),
+      ]),
     ]),
-    el('div', { style: 'padding:0 24px 12px;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;color:var(--muted)' }, [rangeLabel]),
-    el('div', { style: 'padding:0 24px 0' }, [
-      el('div', { class: 'ichips-wrap' }, CATS.map(k =>
-        ichip(k.split(' ')[0], catIcon(k), STATE.chartCat === k, () => { STATE.chartCat = k; render(); })
-      )),
+    el('div', { class: 'hm-legend' }, [
+      el('span', {}, ['mniej']),
+      el('div', { class: 'hm-legend-scale' }, []),
+      el('span', {}, ['więcej']),
+      el('span', { class: 'hm-legend-max' }, [`max: ${fmt(Math.round(maxVal))} zł`]),
     ]),
-    el('div', { class: 'charts-dock', html: `
-      <svg id="chart-svg" viewBox="0 0 ${w} ${h + 4}" width="100%" style="display:block;touch-action:none">
-        <defs><linearGradient id="g" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#FFE600" stop-opacity="0.7"/><stop offset="100%" stop-color="#FFE600" stop-opacity="0"/></linearGradient></defs>
-        ${yTicks.map((v, i) => `<text class="chart-grid" style="--d:${100 + i * 80}ms;fill:var(--muted-4)" x="0" y="${yOf(v) + 3}" font-size="9" font-family="Inter" font-weight="600">${fmt(Math.round(v))} zł</text><line class="chart-grid" style="--d:${100 + i * 80}ms;stroke:var(--surface-3)" x1="${padL}" y1="${yOf(v)}" x2="${w}" y2="${yOf(v)}" stroke-width="1"/>`).join('')}
-        <path class="chart-area" d="${area}" fill="url(#g)"/>
-        <path class="chart-line" d="${path}" stroke="#FFE600" stroke-width="2.5" fill="none"/>
-        <circle class="chart-dot" cx="${padL + (points.length - 1) * xStep}" cy="${yOf(last.val)}" r="4" style="fill:var(--fg)"/>
-        ${xTickIdx.map((i, j) => `<text class="chart-xtick" style="--d:${400 + j * 80}ms;fill:var(--muted)" x="${padL + i * xStep}" y="${h + 14}" font-size="8" font-family="Inter" font-weight="600">${ML[points[i].mi - 1].toUpperCase()}${points.length > 12 ? ` '${String(points[i].yr).slice(2)}` : ''}</text>`).join('')}
-        <g id="chart-tip" style="display:none;pointer-events:none">
-          <line x1="0" y1="${padT}" x2="0" y2="${h - padB}" style="stroke:var(--fg)" stroke-width="0.6" stroke-dasharray="2 2" opacity="0.35"/>
-          <circle cx="0" cy="0" r="5" style="fill:var(--fg)"/>
-          <text x="0" y="0" font-family="Anton" font-size="15" style="fill:var(--fg)" text-anchor="middle" letter-spacing="-0.4">0</text>
-        </g>
-        <rect x="${padL}" y="0" width="${w - padL}" height="${h}" fill="transparent" style="cursor:crosshair"
-          onpointermove="chartTipMove(event)" onpointerdown="chartTipMove(event)" onpointerleave="chartTipHide()"/>
-      </svg>
-    ` }),
   ]);
 }
 
@@ -1565,149 +1785,298 @@ async function openTimelineDetail(e) {
   }
 }
 
-// Timeline: 3-kolumnowy sliding window kafelków wokół (STATE.yr, STATE.mi), stackowany przez lata (zakres)
-function renderTimeline() {
-  const today = new Date();
-  const todayYr = today.getFullYear();
-  const todayMi = today.getMonth(); // 0-11
-
-  const N = { '3mc': 3, '6mc': 6, 'rok': 12 }[STATE.tlBucket] || 3;
-  const halfBefore = Math.floor((N - 1) / 2);
-  // Komórki: sliding window wokół (STATE.yr, STATE.mi). i=0 = bieżący, -1 = wstecz, +1 = w przód.
-  const cells = [];
-  for (let i = -halfBefore; i < N - halfBefore; i++) {
-    const idx = STATE.yr * 12 + STATE.mi + i;
-    const yr = Math.floor((idx - 1) / 12);
-    const mi = ((idx - 1) % 12) + 1;
-    const isCurr = yr === STATE.yr && mi === STATE.mi;
-    cells.push({ yr, mi, isCurr, label: ML[mi - 1] });
+// Shared row renderer — branchuje po przekazanym `mode` (list / grid2 / grid3)
+function renderRow(w, onClick, mode) {
+  const click = onClick || (() => openLightbox(w));
+  const unpaid = w.kwota === 0; // niezapłacone stałe → żółty akcent
+  if (mode === 'list') {
+    return txRow(w, click);
   }
+  if (mode === 'grid2') {
+    return el('div', { class: 'tile-mid' + (unpaid ? ' unpaid' : ''), onclick: click }, [
+      el('div', { class: 'tile-mid-nm' }, [w.nazwa]),
+      el('div', { class: 'tile-mid-cat' }, [w.kategoria]),
+      el('div', { class: 'tile-mid-v' }, [fmt(Math.abs(w.kwota))]),
+    ]);
+  }
+  // grid3 — kompakt (default); unpaid=żółty, paid=zielony
+  return el('div', { class: 'mini-tile ' + (unpaid ? 'unpaid' : 'paid'), style: 'cursor:pointer', onclick: click }, [
+    el('div', { class: 'n' }, [w.nazwa]),
+    el('div', { class: 'a' }, [fmt(Math.abs(w.kwota))]),
+  ]);
+}
 
-  // Lata w zakresie — relatywnie do roku komórki
+// Shared controls bar: kategorie dropdown + display switch (+ opcjonalnie zakres dla Historii)
+
+// Default opts dla display switch (Home/Trans/Hist): list / grid2 / grid3
+const DISP_OPTS_DEFAULT = [
+  { val: 'list',  svg: '<line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>' },
+  { val: 'grid2', svg: '<rect x="3" y="3" width="7" height="18"/><rect x="14" y="3" width="7" height="18"/>' },
+  { val: 'grid3', svg: '<rect x="3" y="3" width="5" height="18"/><rect x="9.5" y="3" width="5" height="18"/><rect x="16" y="3" width="5" height="18"/>' },
+];
+
+// Plan-specific opts: list / bar (pasek-centryczny) / donut (kółko)
+const DISP_OPTS_PLAN = [
+  { val: 'list',  svg: '<line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>' },
+  { val: 'bar',   svg: '<rect x="3" y="9" width="18" height="6" rx="0.5"/><rect x="3" y="9" width="11" height="6" rx="0.5" fill="currentColor" stroke="none"/>' },
+  { val: 'donut', svg: '<circle cx="12" cy="12" r="7.5"/><path d="M12,4.5 A7.5,7.5 0 0,1 19,15" fill="none" stroke-linecap="round" stroke-width="3"/>' },
+];
+
+// Charts-specific opts: line / bars / heatmap
+const DISP_OPTS_CHARTS = [
+  { val: 'line',    svg: '<polyline points="3 17 8 11 13 14 17 6 21 9" stroke-linecap="round" stroke-linejoin="round"/>' },
+  { val: 'bars',    svg: '<rect x="4" y="13" width="3" height="7"/><rect x="9" y="9" width="3" height="11"/><rect x="14" y="4" width="3" height="16"/><rect x="19" y="11" width="3" height="9" fill="none" stroke-width="0"/><rect x="19" y="11" width="2" height="9"/>' },
+  { val: 'heatmap', svg: '<rect x="3" y="3" width="5" height="5"/><rect x="10" y="3" width="5" height="5" fill="currentColor" stroke="none"/><rect x="17" y="3" width="4" height="5"/><rect x="3" y="10" width="5" height="5" fill="currentColor" stroke="none"/><rect x="10" y="10" width="5" height="5"/><rect x="17" y="10" width="4" height="5"/><rect x="3" y="17" width="5" height="4"/><rect x="10" y="17" width="5" height="4"/><rect x="17" y="17" width="4" height="4" fill="currentColor" stroke="none"/>' },
+];
+
+// Standalone display switch — używany w Home/Trans/Hist/Plan, każdy ma własny slot stanu i opcjonalnie inne opty
+function renderDispSwitch(stateKey, lsKey, opts = DISP_OPTS_DEFAULT) {
+  const current = STATE[stateKey];
+  const dispBtn = (val, svgInner) => el('button', {
+    class: 'ctrl-disp-inline' + (current === val ? ' on' : ''),
+    onclick: () => {
+      STATE[stateKey] = val;
+      try { localStorage.setItem(lsKey, val); } catch (_) {}
+      render();
+    },
+    html: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${svgInner}</svg>`,
+  });
+  return el('div', { class: 'ctrl-disp-bar' }, opts.map(o => dispBtn(o.val, o.svg)));
+}
+
+// Używane w renderTimeline i renderTrans — kontrolki z dropdownami
+// hcKey/lsKey: który slot STATE i którego klucza localStorage używać dla ukrytych kategorii (per view!)
+function renderCtrlBar({ withZakres = false, hcKey = 'uiHiddenCatsHist', lsKey = 'uiHiddenCatsHist', dispKey = 'uiDisplayHist', dispLsKey = 'uiDisplayHist', dispOpts = DISP_OPTS_DEFAULT } = {}) {
+  const zakresLabels = { '1': '1 rok', '2': '2 lata', '3': '3 lata', 'all': 'całość' };
+  const hcState = STATE[hcKey] || {};
+  const activeCats = CATS.filter(k => !hcState[k]).length;
+  const allVisible = activeCats === CATS.length;
+  const saveHc = () => { try { localStorage.setItem(lsKey, JSON.stringify(STATE[hcKey])); } catch (_) {} };
+
+  const trig = (key, label, val) => el('div', {
+    class: 'ctrl-trig' + (STATE.uiOpenDrawer === key ? ' on' : ''),
+    onclick: () => { STATE.uiOpenDrawer = STATE.uiOpenDrawer === key ? null : key; render(); },
+  }, [
+    el('div', { class: 'l' }, [
+      el('div', { class: 'lbl' }, [label]),
+      el('div', { class: 'val' }, [val]),
+    ]),
+    el('span', { class: 'chev', html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>' }),
+  ]);
+
+  const trigBarChildren = [];
+  if (withZakres) trigBarChildren.push(trig('zakres', 'Zakres', zakresLabels[STATE.tlZakres] || STATE.tlZakres));
+  trigBarChildren.push(trig('kategorie', 'Kategorie', `${activeCats} z ${CATS.length}`));
+  trigBarChildren.push(renderDispSwitch(dispKey, dispLsKey, dispOpts));
+  const trigBar = el('div', { class: 'ctrl-bar' }, trigBarChildren);
+
+  const drawerWrap = (children) => el('div', {}, [
+    el('div', { class: 'ctrl-bd', onclick: () => { STATE.uiOpenDrawer = null; render(); } }),
+    el('div', { class: 'ctrl-dr' }, children),
+  ]);
+  const drawerHead = (title) => el('div', { class: 'ctrl-dr-h' }, [
+    el('span', { class: 'lbl' }, [title]),
+    el('div', { class: 'x', onclick: () => { STATE.uiOpenDrawer = null; render(); } }, ['×']),
+  ]);
+
+  let drawer = null;
+  if (STATE.uiOpenDrawer === 'zakres' && withZakres) {
+    const segBtn = (label, val) => el('button', {
+      class: 'ctrl-seg' + (STATE.tlZakres === val ? ' on' : ''),
+      onclick: () => {
+        STATE.tlZakres = val;
+        STATE.uiOpenDrawer = null;
+        try { localStorage.setItem('tlZakres', val); } catch (_) {}
+        render();
+      },
+    }, [label]);
+    drawer = drawerWrap([
+      drawerHead('Zakres czasowy'),
+      el('div', { class: 'ctrl-seg-row' }, [
+        segBtn('1 rok', '1'),
+        segBtn('2 lata', '2'),
+        segBtn('3 lata', '3'),
+        segBtn('Całość', 'all'),
+      ]),
+    ]);
+  } else if (STATE.uiOpenDrawer === 'kategorie') {
+    // "Wszystkie" smart-toggle: jeśli wszystkie widoczne → klik wyłącza wszystkie; w innym wypadku → przywraca wszystkie
+    const wszystkieBtn = el('div', {
+      class: 'ctrl-cat all' + (allVisible ? '' : ' off'),
+      onclick: () => {
+        if (allVisible) {
+          STATE[hcKey] = {};
+          CATS.forEach(k => { STATE[hcKey][k] = true; });
+        } else {
+          STATE[hcKey] = {};
+        }
+        saveHc();
+        render();
+      },
+    }, [
+      el('span', { class: 'ic', html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>' }),
+      el('span', { class: 'nm' }, ['Wszystkie']),
+    ]);
+    const cats = [wszystkieBtn];
+    CATS.forEach(k => {
+      const off = !!STATE[hcKey][k];
+      cats.push(el('div', {
+        class: 'ctrl-cat' + (off ? ' off' : ''),
+        onclick: () => {
+          STATE[hcKey][k] = !STATE[hcKey][k];
+          saveHc();
+          render();
+        },
+      }, [
+        el('span', { class: 'ic', html: `<svg viewBox="0 0 24 24">${catIcon(k)}</svg>` }),
+        el('span', { class: 'nm' }, [k]),
+      ]));
+    });
+    drawer = drawerWrap([
+      drawerHead('Kategorie (klik = włącz / wyłącz)'),
+      el('div', { class: 'ctrl-cats' }, cats),
+    ]);
+  }
+  return { trigBar, drawer };
+}
+
+// Timeline: pionowa lista miesięcy z eventami (jak Home), default scroll na bieżący miesiąc
+function renderTimeline() {
+  // Zakres miesięcy: od (current + 1) na górze do (yrsBack lat wstecz) na dole
   const yrsBack = STATE.tlZakres === 'all' ? 99 : Number(STATE.tlZakres);
   const bounds = getYearBounds();
-  const minYr = bounds ? bounds.min : -Infinity;
-
-  // Eventy per komórka — stack lat dla danego miesiąca cell.mi
-  const eventsByCell = cells.map(cell => {
-    const startYr = Math.max(minYr, cell.yr - yrsBack + 1);
-    const evs = [];
-    for (let yr = startYr; yr <= cell.yr; yr++) {
-      const naduch = getNadchodzaceWpisy(yr).filter(w => w.miesiac === cell.mi);
-      const alerts = getAllWpisy().filter(w => w.rok === yr && w.miesiac === cell.mi && w.typ === 'transakcja' && w.anomalia);
-      naduch.forEach(w => {
-        if (STATE.tlHiddenCats[w.kategoria]) return;
-        evs.push({ ...w, kind: 'nadchodzace', szacunek: getSzacunek(w), srcYr: yr });
-      });
-      alerts.forEach(w => {
-        if (STATE.tlHiddenCats[w.kategoria]) return;
-        evs.push({ ...w, kind: 'alert', srcYr: yr });
-      });
+  const minYr = bounds ? bounds.min : STATE.yr - yrsBack + 1;
+  const startYr = Math.max(minYr, STATE.yr - yrsBack + 1);
+  // Najpierw budujemy chronologicznie (najstarszy → najnowszy + 1), potem reverse
+  const months = [];
+  for (let yr = startYr; yr <= STATE.yr; yr++) {
+    const miFrom = 1;
+    const miTo = (yr === STATE.yr) ? STATE.mi : 12;
+    for (let mi = miFrom; mi <= miTo; mi++) {
+      months.push({ yr, mi });
     }
-    evs.sort((a, b) => (a.srcYr - b.srcYr) || (a.kind === b.kind ? Math.abs(b.kwota) - Math.abs(a.kwota) : a.kind === 'nadchodzace' ? -1 : 1));
-    return evs;
+  }
+  // Dorzuć current + 1 na samą górę (po reverse)
+  const nextMi = STATE.mi === 12 ? 1 : STATE.mi + 1;
+  const nextYr = STATE.mi === 12 ? STATE.yr + 1 : STATE.yr;
+  months.push({ yr: nextYr, mi: nextMi });
+  months.reverse(); // current+1 na top, najstarsze na dole
+
+  // Eventy per miesiąc (Naduch + Alerty z tego miesiąca, z filtrem kategorii)
+  const eventsByMonth = months.map(({ yr, mi }) => {
+    const naduch = getNadchodzaceWpisy(yr).filter(w => w.miesiac === mi && !STATE.uiHiddenCatsHist[w.kategoria]);
+    const alerts = getAllWpisy().filter(w => w.rok === yr && w.miesiac === mi && w.typ === 'transakcja' && w.anomalia && !STATE.uiHiddenCatsHist[w.kategoria]);
+    const evs = [
+      ...naduch.map(w => ({ ...w, kind: 'nadchodzace', szacunek: getSzacunek(w) })),
+      ...alerts.map(w => ({ ...w, kind: 'alert' })),
+    ];
+    evs.sort((a, b) => (a.kind === b.kind ? Math.abs(b.kwota) - Math.abs(a.kwota) : a.kind === 'nadchodzace' ? -1 : 1));
+    return { yr, mi, evs };
   });
 
-  // Render kafelka — wszystkie zielone jak .mini-tile.paid w Home
-  const renderTile = (e) => {
+  // Renderer wpisu — kafel (grid) lub pełny wiersz (list jak w Transakcjach), zależnie od uiDisplayHist
+  const histDisp = STATE.uiDisplayHist;
+  const renderItem = (e) => {
     const isNaduch = e.kind === 'nadchodzace';
     const paid = isNaduch && e.kwota > 0;
     const amt = paid ? e.kwota : Math.abs(e.szacunek || e.kwota);
+    if (histDisp === 'list') {
+      // Reuse txRow — wygląda dokładnie jak Transakcje
+      const wpisForRow = (isNaduch && e.kwota === 0)
+        ? { ...e, kwota: Math.abs(e.szacunek || 0) }
+        : e;
+      return txRow(wpisForRow, () => openTimelineDetail(e));
+    }
+    if (histDisp === 'grid2') {
+      // 2 kol — nazwa + kategoria stacked, kwota w prawym dolnym
+      return el('div', {
+        class: 'tile-mid',
+        onclick: () => openTimelineDetail(e),
+      }, [
+        el('div', { class: 'tile-mid-nm' }, [e.nazwa]),
+        el('div', { class: 'tile-mid-cat' }, [e.kategoria]),
+        el('div', { class: 'tile-mid-v' }, [fmt(amt)]),
+      ]);
+    }
+    // grid3 — kompaktowo, tylko nazwa + kwota
     return el('div', {
       class: 'mini-tile paid',
-      style: 'margin-bottom:4px;cursor:pointer',
+      style: 'cursor:pointer',
       onclick: () => openTimelineDetail(e),
     }, [
-      el('div', { class: 'n' }, [
-        el('span', { style: 'color:var(--muted-4);font-weight:700;margin-right:3px' }, [`'${String(e.srcYr).slice(2)}`]),
-        e.nazwa,
-      ]),
+      el('div', { class: 'n' }, [e.nazwa]),
       el('div', { class: 'a' }, [fmt(amt)]),
     ]);
   };
 
-  // Grid: zawsze 3 kolumny. 3mc → 1 rząd, 6mc → 2 rzędy, rok (12mc) → 4 rzędy.
-  const cols = 3;
-  const rows = Math.ceil(N / cols);
-  const gridRows = [];
-  for (let r = 0; r < rows; r++) {
-    const startC = r * cols;
-    const sliceCells = cells.slice(startC, startC + cols);
-    const sliceEvs = eventsByCell.slice(startC, startC + cols);
-    // Wiersz etykiet
-    gridRows.push(el('div', { style: 'display:grid;grid-template-columns:repeat(3, 1fr);border-bottom:1.5px solid var(--border);padding-bottom:6px;gap:6px' }, sliceCells.map((c, i) => {
-      const hasEv = sliceEvs[i]?.length > 0;
-      return el('div', { class: 'tl-month', style: `text-align:center;font-size:10px;font-weight:700;color:${c.isCurr ? 'var(--fg)' : (hasEv ? 'var(--muted-2)' : 'var(--muted-4)')};letter-spacing:0.5px;text-transform:uppercase` }, [
-        el('span', {}, [c.label]),
-        el('span', { style: 'margin-left:4px;color:var(--muted);font-weight:600' }, [`'${String(c.yr).slice(2)}`]),
-        c.isCurr ? el('span', { style: 'display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--accent);margin-left:5px;vertical-align:middle' }) : null,
-      ]);
-    })));
-    // Wiersz z kafelkami
-    gridRows.push(el('div', { style: 'display:grid;grid-template-columns:repeat(3, 1fr);gap:6px;margin-top:12px;margin-bottom:20px' }, sliceEvs.map(evs => {
-      return el('div', { style: 'min-width:0' }, evs.length ? evs.map(renderTile) : [el('div', { style: 'font-size:9px;color:var(--border-3);text-align:center;padding:4px 0' }, ['—'])]);
-    })));
-  }
+  // Sekcje: każdy miesiąc to nagłówek + lista/grid wpisów (lub "brak")
+  const gridClass = histDisp === 'list' ? 'tl-body-list'
+    : histDisp === 'grid2' ? 'tl-body-grid2'
+    : 'tl-body-grid3';
+  const sections = eventsByMonth.map(({ yr, mi, evs }) => {
+    const isCurr = yr === STATE.yr && mi === STATE.mi;
+    const headerAttrs = isCurr ? { class: 'tl-section curr', 'data-current-month': '1' } : { class: 'tl-section' };
+    return el('div', headerAttrs, [
+      el('div', { class: 'tl-section-h' }, [
+        el('span', { class: 'tl-mc-name' }, [ML_FULL[mi - 1]]),
+        el('span', { class: 'tl-mc-yr' }, [String(yr)]),
+        el('span', { class: 'tl-mc-count' }, [evs.length ? String(evs.length) : '—']),
+      ]),
+      evs.length ? el('div', { class: gridClass }, evs.map(renderItem)) : null,
+    ].filter(Boolean));
+  });
 
-  // Chip helpers
-  const trybChip = (label, stateKey, stateVal) => el('span', {
-    class: 'chip ' + (STATE[stateKey] === stateVal ? 'active' : ''),
-    onclick: () => { STATE[stateKey] = stateVal; render(); },
-  }, [label]);
-
-  // Filtr kategorii — ichipy (ikony + nazwa). 4 główne + "Więcej" (razem 5 = 1 rząd) rozwija pełną siatkę.
-  const TOP5 = ['Firma', 'Nela', 'Dom', 'Restauracje'];
-  const restCats = CATS.filter(k => !TOP5.includes(k));
-  const showAllLegend = STATE.tlShowAllCats;
-  const legendChips = [];
-  TOP5.forEach(k => legendChips.push(ichip(k.split(' ')[0], catIcon(k), !STATE.tlHiddenCats[k], () => { STATE.tlHiddenCats[k] = !STATE.tlHiddenCats[k]; render(); }, 'ylw')));
-  if (showAllLegend) {
-    restCats.forEach(k => legendChips.push(ichip(k.split(' ')[0], catIcon(k), !STATE.tlHiddenCats[k], () => { STATE.tlHiddenCats[k] = !STATE.tlHiddenCats[k]; render(); }, 'ylw')));
-    legendChips.push(ichip('Mniej', '<path d="M18 15l-6-6-6 6"/>', false, () => { STATE.tlShowAllCats = false; render(); }));
-  } else {
-    legendChips.push(ichip('Więcej', '<circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/>', false, () => { STATE.tlShowAllCats = true; render(); }));
-  }
-  const legend = el('div', { class: 'ichips-wrap' }, legendChips);
-
-  const totalEvents = eventsByCell.reduce((s, c) => s + c.length, 0);
-  const firstCell = cells[0], lastCell = cells[cells.length - 1];
-  const rangeLabel = `${ML[firstCell.mi - 1]} '${String(firstCell.yr).slice(2)} → ${ML[lastCell.mi - 1]} '${String(lastCell.yr).slice(2)}`;
-
-  const smChip = (label, stateKey, stateVal) => el('span', {
-    class: 'chip sm ' + (STATE[stateKey] === stateVal ? 'active' : ''),
-    onclick: () => { STATE[stateKey] = stateVal; render(); },
-  }, [label]);
+  // Kontrolki — z helpera (z Zakresem dla Historii)
+  const { trigBar, drawer } = renderCtrlBar({ withZakres: true });
 
   const root = el('div', { class: 'tl-page' }, [
-    el('div', { style: 'padding:22px 24px 18px' }, [
+    el('div', { style: 'padding:36px 24px 14px' }, [
       el('div', { class: 'big-h' }, ['Historia']),
     ]),
-    el('div', { style: 'padding:0 24px 18px;display:flex;align-items:center;gap:6px;flex-wrap:nowrap;justify-content:space-between' }, [
-      smChip('3mc', 'tlBucket', '3mc'),
-      smChip('6mc', 'tlBucket', '6mc'),
-      smChip('rok', 'tlBucket', 'rok'),
-      smChip('1 rok', 'tlZakres', '1'),
-      smChip('2 lata', 'tlZakres', '2'),
-      smChip('3 lata', 'tlZakres', '3'),
-    ]),
-    el('div', { class: 'tl-grid', style: 'padding:24px 18px 0' }, gridRows),
+    el('div', { class: 'ctrl-host' }, [
+      trigBar,
+      drawer,
+    ].filter(Boolean)),
+    el('div', { class: 'tl-list', style: 'padding:14px 24px 0' }, sections),
   ]);
-  // Renderuj legendę poza #app (host w body) — żeby position:fixed faktycznie działało
+  // Ukryj stary host fixed-legend — legenda teraz inline w drawerze
   const host = document.getElementById('tl-legend-host');
-  if (host) {
-    host.innerHTML = '';
-    host.appendChild(legend);
-    host.style.display = 'block';
-  }
+  if (host) { host.innerHTML = ''; host.style.display = 'none'; }
   return root;
 }
 
+
 // ============== MAIN RENDER ==============
+// === UNIFIED ENTRANCE ANIMATIONS ===
+// Chrome (raz per mount widoku) vs dane (zawsze). Sortuje wszystko po pozycji top-left → bottom-right.
+const ANIM_CHROME_SEL = '.big-h, .ctrl-bar, .tl-section-h, .shell-hero, .trans-add-tile, .tx-month-h';
+const ANIM_DATA_SEL = '.hero-anim, .mini-tile, .tile-mid, .tx-row, .pr, .pr-sum, .plan-tile, .plan-donut, .ichip, .chip, .chart-line, .chart-area, .chart-dot, .chart-grid, .chart-xtick';
+const ANIM_ALL_SEL = ANIM_CHROME_SEL + ', ' + ANIM_DATA_SEL;
+
+function runEntranceAnims(isSameView) {
+  // Re-render tego samego widoku — chrome skip (już animowane przy mount)
+  if (isSameView) {
+    document.querySelectorAll('#app ' + ANIM_CHROME_SEL).forEach(el => el.classList.add('anim-skip'));
+  }
+  // Wszystko co ma realnie animować (po skip nie animuje)
+  const targets = Array.from(document.querySelectorAll('#app ' + ANIM_ALL_SEL))
+    .filter(el => !el.classList.contains('anim-skip'));
+  if (!targets.length) return;
+  // Sort top-left → bottom-right (binowanie po top/14 żeby elementy w tym samym rzędzie szły po left)
+  const sorted = targets.map(el => {
+    const r = el.getBoundingClientRect();
+    return { el, key: Math.round(r.top / 14) * 1000 + Math.round(r.left) };
+  }).sort((a, b) => a.key - b.key);
+  // 22ms krok, cap 450ms (snappy onset, ostatni element max ~450ms+animacja)
+  sorted.forEach((item, i) => {
+    item.el.style.setProperty('--anim-d', Math.min(i * 22, 450) + 'ms');
+  });
+}
+
 function render() {
   const app = document.getElementById('app');
-  // Shell anim tylko gdy widok się zmienił (nie przy swipe w obrębie tego samego widoku)
+  // Re-render tego samego widoku? (swipe miesiąca, filtr, sort — chrome zostaje, dane reanimują)
   const sameView = STATE._lastView === STATE.view;
-  document.body.classList.toggle('no-shell-anim', sameView);
   STATE._lastView = STATE.view;
   app.innerHTML = '';
   // Ukryj legendę Historii jeśli zmieniamy widok (renderTimeline pokaże ją z powrotem)
@@ -1740,15 +2109,8 @@ function render() {
   document.body.classList.toggle('big-text', !!STATE.bigText);
   syncThemeSeg();
 
-  // Stagger animations
-  const groups = ['.hero-anim', '.mini-tile', '.ichip', '.pr', '.tx-row', '.tx-month-h', '.tl-month', '.tl-box', '.trans-add-tile', '.chip'];
-  groups.forEach(sel => {
-    document.querySelectorAll('#app ' + sel).forEach((el, i) => {
-      const d = i * 45;
-      el.style.setProperty('--d', d + 'ms');
-      el.style.setProperty('--d2', (d + 350) + 'ms');
-    });
-  });
+  // Unified entrance animations — pozycja top-left → bottom-right, chrome raz/dane zawsze
+  runEntranceAnims(sameView);
 }
 
 // ============== ADD MODAL ==============
@@ -1760,10 +2122,7 @@ const SWIPE_THRESHOLD = 70;
 
 function onPointerDown(e) {
   if (e.button !== undefined && e.button > 0) return;
-  // Nie obsługuj swipe gdy otwarty modal/sheet/picker
   if (document.querySelector('.sheet.show, .mpicker.show, .mp-bg.show, .modal-bg.show')) return;
-  // Nie startuj z inputów (klik tam ma działać normalnie). Buttony OK —
-  // przeglądarka i tak nie odpali click jeśli wskaźnik się znacznie przesunął.
   const tag = (e.target.tagName || '').toLowerCase();
   if (['input','textarea','select'].includes(tag)) return;
   swipe = { x0: e.clientX, y0: e.clientY, active: false, started: false };
@@ -1775,7 +2134,6 @@ function onPointerMove(e) {
   const dy = e.clientY - swipe.y0;
   if (!swipe.started) {
     if (Math.abs(dx) < 12 && Math.abs(dy) < 12) return;
-    // Decide direction once
     if (Math.abs(dx) > Math.abs(dy) * 1.3) {
       swipe.started = true;
       swipe.active = true;
@@ -1793,13 +2151,22 @@ function onPointerMove(e) {
 function onPointerUp(e) {
   if (!swipe) return;
   const wasActive = swipe.active;
-  const dx = (e.clientX || 0) - swipe.x0;
+  // pointercancel → e.clientX = 0 → bug: -x0 traktowane jako swipe; ignorujemy cancel
+  if (e.type === 'pointercancel') {
+    swipe = null;
+    if (wasActive) {
+      const app = document.getElementById('app');
+      app.style.transition = 'transform 0.22s cubic-bezier(0.16, 1, 0.3, 1)';
+      app.style.transform = 'translateX(0)';
+    }
+    return;
+  }
+  const dx = e.clientX - swipe.x0;
   swipe = null;
   if (!wasActive) return;
   const app = document.getElementById('app');
   if (Math.abs(dx) > SWIPE_THRESHOLD) {
     const goNext = dx < 0;
-    // Blok jeśli nie wolno — odbij wizualnie
     if ((goNext && !canGoNext()) || (!goNext && !canGoPrev())) {
       app.style.transition = 'transform 0.22s cubic-bezier(0.16, 1, 0.3, 1)';
       app.style.transform = 'translateX(0)';
@@ -2305,6 +2672,21 @@ function saveAdd() {
 }
 
 // ============== BOOT ==============
+// Globalna sync settings UI — musi działać po każdym loadData oraz przy każdym otwarciu settings
+function syncSettingsUi() {
+  const setT = (id, key) => {
+    const t = document.getElementById(id);
+    if (!t) return;
+    if (STATE[key]) t.classList.add('on'); else t.classList.remove('on');
+  };
+  setT('t-hide', 'hideAmounts');
+  setT('t-big-text', 'bigText');
+  if (typeof syncThemeSeg === 'function') syncThemeSeg();
+  if (typeof syncDataModeSeg === 'function') syncDataModeSeg();
+  const tokenEl = document.getElementById('cloud-token-input');
+  if (tokenEl) tokenEl.value = STATE.cloudToken || '';
+}
+
 function boot() {
   // Nav clicks
   $$('.nav-item').forEach(n => {
@@ -2313,7 +2695,7 @@ function boot() {
       STATE.view = v; STATE.filter = null; render();
     });
   });
-  $('#gear-btn').addEventListener('click', () => { showSheet('settings-sheet'); refreshBackupStatus(); });
+  $('#gear-btn').addEventListener('click', () => { showSheet('settings-sheet'); syncSettingsUi(); refreshBackupStatus(); });
   $('#today-btn').addEventListener('click', () => {
     const today = new Date();
     STATE.yr = today.getFullYear();
@@ -2345,11 +2727,7 @@ function boot() {
   $$('[data-close]').forEach(b => b.addEventListener('click', closeSheet));
   $('#save-add').addEventListener('click', saveAdd);
 
-  // Settings toggles (hide-amounts, big-text)
-  function setToggle(id, key) {
-    const t = $('#' + id);
-    if (STATE[key]) t.classList.add('on'); else t.classList.remove('on');
-  }
+  // Settings toggles (hide-amounts, big-text) — sync UI robi syncSettingsUi()
   $$('.set-row[data-toggle]').forEach(r => {
     r.addEventListener('click', () => {
       const t = r.getAttribute('data-toggle');
@@ -2358,12 +2736,11 @@ function boot() {
       if (!key) return;
       STATE[key] = !STATE[key];
       localStorage.setItem(key, STATE[key]);
-      setToggle({ 'hide-amounts': 't-hide', 'big-text': 't-big-text' }[t], key);
+      syncSettingsUi();
       render();
     });
   });
-  setToggle('t-hide', 'hideAmounts');
-  setToggle('t-big-text', 'bigText');
+  syncSettingsUi();
 
   // Theme segmented control (Auto/Dzień/Noc)
   $$('#theme-seg .seg').forEach(s => {

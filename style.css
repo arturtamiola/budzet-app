@@ -153,11 +153,11 @@ body.dark {
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); font-family: 'Inter', sans-serif; overflow-x: hidden; }
-body { padding-bottom: 90px; min-height: 100vh; transition: background 0.18s, color 0.18s; }
+body { padding-bottom: 90px; min-height: 100vh; transition: background 0.18s, color 0.18s; touch-action: pan-y; }
 .num { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .caps-i { font-size: 9px; letter-spacing: 2.5px; text-transform: uppercase; font-weight: 600; color: var(--muted); white-space: nowrap; }
 .anton { font-family: 'Anton', sans-serif; font-weight: 400; letter-spacing: -1.5px; }
-.big-h { font-family: 'Anton'; font-size: 56px; letter-spacing: -2.2px; line-height: 0.95; color: var(--fg); }
+.big-h { font-family: 'Anton'; font-size: 76px; letter-spacing: -3px; line-height: 0.9; color: var(--fg); }
 .hidden { display: none !important; }
 
 /* TOPBAR */
@@ -206,8 +206,10 @@ body { padding-bottom: 90px; min-height: 100vh; transition: background 0.18s, co
 .sheet .ichip .ic svg { width: 14px; height: 14px; stroke-width: 1.6; }
 .sheet .ichip .txt { font-size: 7px; letter-spacing: 1px; }
 
-/* MINI TILES (Home) */
+/* MINI TILES (Home) — layout zależny od uiDisplay */
 .mini-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-top: 14px; }
+.mini-grid.disp-grid2 { grid-template-columns: 1fr 1fr; }
+.mini-grid.disp-list { grid-template-columns: 1fr; }
 .mini-tile { padding: 8px 8px; background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--border-2); text-align: left; min-width: 0; }
 .mini-tile .n { font-size: 8px; font-weight: 700; color: var(--muted-3); letter-spacing: 1px; text-transform: uppercase; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mini-tile .a { font-family: 'Anton'; font-size: 16px; color: var(--fg); letter-spacing: -0.3px; margin-top: 4px; line-height: 1; }
@@ -216,9 +218,9 @@ body { padding-bottom: 90px; min-height: 100vh; transition: background 0.18s, co
 .mini-tile.anom { border-left-color: var(--border-2); border-left-style: dashed; }
 .mini-tile.anom .a { color: var(--muted-3); }
 .mini-tile.unpaid { border-left-color: var(--accent); cursor: pointer; }
-.mini-tile.paid { border-left-color: var(--paid-fg); cursor: pointer; background: var(--paid-bg); }
-.mini-tile.paid .a { color: var(--paid-fg); }
-.mini-tile.paid .n { color: var(--paid-meta); }
+.mini-tile.paid { border-left-color: var(--paid-fg); cursor: pointer; background: var(--card); }
+.mini-tile.paid .a { color: var(--fg); font-size: 18px; }
+.mini-tile.paid .n { color: var(--muted-3); }
 .mini-tile .a .planned { font-size: 10px; color: var(--muted); margin-left: 3px; font-weight: 600; letter-spacing: 0.5px; font-family: 'Inter', sans-serif; }
 .sec-add { width: 24px; height: 24px; border-radius: 50%; background: var(--accent); border: none; font-size: 16px; font-weight: 800; cursor: pointer; padding: 0; line-height: 1; display: inline-flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px var(--accent-glow-strong); color: var(--accent-fg); }
 .sec-add:hover { transform: scale(1.1); }
@@ -255,6 +257,130 @@ body { padding-bottom: 90px; min-height: 100vh; transition: background 0.18s, co
 .pr.over .bar > div { background: var(--danger); }
 .pr.empty { opacity: 0.35; }
 .pr-sum { padding: 16px 0 10px; border-top: 2px solid var(--fg); margin-top: 8px; display: flex; justify-content: space-between; align-items: baseline; }
+
+/* === Niezapłacone (kwota=0) — żółty border-left akcent, tekst normalny (jak Home Stałe) === */
+/* mini-tile.unpaid już istnieje wyżej (linia 220) — nie nadpisujemy */
+.tile-mid.unpaid { border-left-color: var(--accent); }
+.tx-row.unpaid { border-left: 3px solid var(--accent); padding-left: 9px; }
+
+/* === Plan tiles (bar / donut) === */
+.plan-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.plan-grid-1 { display: flex; flex-direction: column; gap: 6px; }
+.plan-tile.empty { opacity: 0.35; }
+
+/* Bar mode — klon tile-mid (Home grid2) + pasek progresu w 3 wierszu */
+.plan-tile.bar {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--paid-fg, #4ad36e);
+  border-radius: 0;
+  padding: 10px 12px;
+  cursor: pointer;
+  min-width: 0;
+  transition: background 0.12s;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto auto;
+  gap: 2px 8px;
+}
+.plan-tile.bar:hover { background: var(--surface-2); }
+.plan-tile.bar.warn { border-left-color: var(--accent); }
+.plan-tile.bar.over { border-left-color: var(--danger); }
+.plan-tile.bar .plan-tile-nm {
+  grid-column: 1 / -1; grid-row: 1;
+  font-size: 13px; font-weight: 700; color: var(--fg); line-height: 1.2;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.plan-tile.bar .plan-tile-sub {
+  grid-column: 1; grid-row: 2;
+  align-self: end;
+  font-size: 8px; color: var(--muted); letter-spacing: 1.3px;
+  text-transform: uppercase; font-weight: 700;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.plan-tile.bar .plan-tile-v {
+  grid-column: 2; grid-row: 2;
+  align-self: end; justify-self: end;
+  font-family: 'Anton'; font-size: 22px; color: var(--fg);
+  letter-spacing: -0.5px; line-height: 1;
+}
+.plan-tile.bar .plan-tile-bar {
+  grid-column: 1 / -1; grid-row: 3;
+  height: 3px; background: var(--bar-bg); margin-top: 8px;
+}
+.plan-tile.bar .plan-tile-bar > div { height: 100%; background: var(--bar-fill); transform-origin: left center; }
+.plan-tile.bar.warn .plan-tile-bar > div { background: var(--accent); }
+.plan-tile.bar.over .plan-tile-bar > div { background: var(--danger); }
+
+/* === Donut mode — bez kafelka, samo kółko + lekki tekst === */
+.plan-grid-donut {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 18px 8px;
+  padding-top: 8px;
+}
+.plan-donut {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  cursor: pointer;
+  min-width: 0;
+  padding: 6px 4px;
+  background: transparent;
+  border: none;
+  transition: opacity 0.12s;
+}
+.plan-donut:hover { opacity: 0.75; }
+.plan-donut.empty { opacity: 0.35; }
+.plan-donut.warn { --donut-fg: var(--accent); }
+.plan-donut.over { --donut-fg: var(--danger); }
+.plan-donut-svg { line-height: 0; }
+.plan-donut-svg svg { display: block; }
+.plan-donut-nm {
+  font-size: 11px; font-weight: 500; color: var(--fg);
+  margin-top: 6px; line-height: 1.1;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 100%;
+}
+.plan-donut-amt {
+  font-family: 'Anton'; font-size: 24px; color: var(--fg);
+  letter-spacing: -0.5px; line-height: 1;
+  margin-top: 4px;
+  font-weight: normal;
+}
+.plan-donut-limit {
+  font-size: 9px; color: var(--muted); letter-spacing: 0.8px;
+  font-weight: 500; margin-top: 3px;
+}
+
+/* Entry anim też dla planu donut */
+.plan-donut {
+  opacity: 0;
+  animation: anim-enter 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: var(--anim-d, 0ms);
+}
+
+/* Donut mode */
+.plan-tile.donut { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; padding: 8px 10px 8px 12px; }
+.plan-tile.donut .plan-tile-left { min-width: 0; }
+.plan-tile.donut .plan-tile-vals { display: flex; flex-direction: column; gap: 1px; margin-top: 4px; }
+.plan-tile.donut .plan-tile-vals .a { font-family: 'Anton'; font-size: 18px; letter-spacing: -0.4px; color: var(--fg); line-height: 1; }
+.plan-tile.donut .plan-tile-vals .b { font-size: 9px; color: var(--muted); letter-spacing: 1px; font-weight: 600; }
+.plan-tile.donut .plan-tile-donut { flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.plan-tile.donut.warn .plan-tile-donut { --donut-fg: var(--accent); }
+.plan-tile.donut.over .plan-tile-donut { --donut-fg: var(--danger); }
+
+/* Plan tile w nowych trybach — używa wspólnej animacji entry */
+.plan-tile {
+  opacity: 0;
+  animation: anim-enter 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: var(--anim-d, 0ms);
+}
+.plan-tile.bar .plan-tile-bar > div {
+  animation: bar-fill 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(var(--anim-d, 0ms) + 200ms);
+}
 .pr-sum .l { font-size: 11px; letter-spacing: 2.5px; text-transform: uppercase; font-weight: 800; color: var(--fg); }
 .pr-sum .l-sub { font-size: 9px; color: var(--muted-3); letter-spacing: 1.8px; text-transform: uppercase; font-weight: 600; margin-top: 3px; }
 .pr-sum .v { font-family: 'Anton'; font-size: 36px; letter-spacing: -1.2px; color: var(--fg); }
@@ -338,6 +464,23 @@ body.big-text .pr .name { font-size: 15px; }
 body.big-text .pr-sum .v { font-size: 52px; letter-spacing: -1.7px; }
 body.big-text .pr-sum .l { font-size: 13px; }
 body.big-text .pr-sum .l-sub { font-size: 14px; }
+/* Tile-mid (grid2 we wszystkich widokach: Home/Trans/Hist) */
+body.big-text .tile-mid-v { font-size: 30px; letter-spacing: -0.7px; }
+body.big-text .tile-mid-nm { font-size: 16px; }
+body.big-text .tile-mid-cat { font-size: 10px; }
+/* Plan bar tile (tryb pasek) */
+body.big-text .plan-tile.bar .plan-tile-v { font-size: 30px; letter-spacing: -0.7px; }
+body.big-text .plan-tile.bar .plan-tile-nm { font-size: 16px; }
+body.big-text .plan-tile.bar .plan-tile-sub { font-size: 10px; }
+/* Plan donut tile (tryb kółko) */
+body.big-text .plan-donut-amt { font-size: 32px; letter-spacing: -0.7px; }
+body.big-text .plan-donut-nm { font-size: 14px; }
+body.big-text .plan-donut-limit { font-size: 12px; }
+/* Hero number w Home (override inline font-size:88px) */
+body.big-text #app .anton.num { font-size: 110px !important; letter-spacing: -3.8px !important; }
+/* Historia section headers (sticky) */
+body.big-text .tl-mc-name { font-size: 18px; }
+body.big-text .tl-mc-yr { font-size: 14px; }
 
 /* Segmented control 3-state (theme mode: Auto / Dzień / Noc) */
 .seg-3 { display: inline-flex; background: var(--surface); border-radius: 99px; padding: 3px; gap: 2px; flex-shrink: 0; }
@@ -365,6 +508,198 @@ body.big-text .pr-sum .l-sub { font-size: 14px; }
 .tl-grid { padding-bottom: 160px !important; }
 .tl-grid .mini-tile.paid .a { color: var(--fg); }
 
+/* Vertical list — per-month sections (jak Home) */
+.tl-list { padding-bottom: 200px !important; }
+.tl-section { margin-bottom: 28px; }
+.tl-section-h { display: flex; align-items: baseline; gap: 8px; padding: 14px 0 10px; border-bottom: 1.5px solid var(--border); margin-bottom: 12px; position: sticky; top: 0; background: var(--bg); z-index: 5; }
+.tl-section.curr .tl-section-h { border-bottom-color: var(--accent); }
+.tl-mc-name { font-size: 12px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); line-height: 1; }
+.tl-section.curr .tl-mc-name { color: var(--fg); }
+.tl-section.curr .tl-mc-name::after { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-left: 6px; vertical-align: middle; }
+.tl-mc-yr { font-size: 12px; color: var(--muted-3); letter-spacing: 1.5px; font-weight: 700; }
+.tl-mc-count { margin-left: auto; font-size: 10px; color: var(--muted-3); letter-spacing: 1.5px; font-weight: 700; text-transform: uppercase; }
+.tl-section-empty { font-size: 11px; color: var(--muted-3); padding: 6px 2px 0; letter-spacing: 0.5px; }
+.tl-list .mini-tile.paid .a { color: var(--fg); }
+
+/* Display toggles */
+.tl-body-list { display: flex; flex-direction: column; }
+.tl-body-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.tl-body-grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+
+/* Middle-density tile (2 kolumny) — nazwa + kategoria w lewym górnym, kwota Anton w prawym dolnym */
+.tile-mid {
+  background: var(--card, #fff);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--paid-fg, #4ad36e);
+  padding: 10px 12px 10px 12px;
+  cursor: pointer;
+  min-width: 0;
+  transition: background 0.12s;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  gap: 2px 8px;
+}
+.tile-mid:hover { background: var(--surface-2); }
+.tile-mid-nm {
+  grid-column: 1 / -1;
+  font-size: 13px; font-weight: 700; color: var(--fg);
+  line-height: 1.2;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.tile-mid-cat {
+  grid-column: 1;
+  align-self: end;
+  font-size: 8px; color: var(--muted); letter-spacing: 1.3px;
+  text-transform: uppercase; font-weight: 700;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tile-mid-v {
+  grid-column: 2;
+  align-self: end;
+  justify-self: end;
+  font-family: 'Anton'; font-size: 22px;
+  color: var(--fg);
+  letter-spacing: -0.5px;
+  line-height: 1;
+}
+
+/* Czarne kwoty w grid3/grid2 (override globalnego zielonego mini-tile.paid w kontekście Historii/Trans) */
+.tl-body-grid3 .mini-tile.paid .a,
+.tl-body-grid2 .mini-tile.paid .a { color: var(--fg); }
+
+/* ===== KONTROLKI (Historia + reusable) ===== */
+.ctrl-host { position: relative; padding: 16px 24px 4px; }
+.ctrl-bar { display: flex; gap: 6px; align-items: stretch; }
+
+/* Dropdown triggery (Zakres, Kategorie) — jasno-szare pigułki */
+.ctrl-trig {
+  flex: 1;
+  background: var(--surface);
+  color: var(--fg);
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  min-width: 0;
+  transition: background 0.12s;
+}
+.ctrl-trig:hover { background: var(--surface-hover); }
+.ctrl-trig.on { background: var(--fg); color: var(--bg); }
+.ctrl-trig .l { min-width: 0; flex: 1; line-height: 1.1; }
+.ctrl-trig .lbl { font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+.ctrl-trig.on .lbl { color: rgba(255,255,255,0.5); }
+.ctrl-trig .val { font-size: 12px; font-weight: 700; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ctrl-trig .chev { flex-shrink: 0; opacity: 0.5; }
+.ctrl-trig .chev svg { width: 12px; height: 12px; display: block; }
+
+/* Inline display switch — zawsze widoczny, jasno-szary kontener z 3 ikonkami */
+.ctrl-disp-bar {
+  display: flex;
+  gap: 0;
+  background: var(--surface);
+  padding: 3px;
+  flex-shrink: 0;
+  min-height: 38px;
+  align-items: stretch;
+}
+.ctrl-disp-inline {
+  width: 36px; height: 100%;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.12s;
+}
+.ctrl-disp-inline:hover { color: var(--fg); }
+.ctrl-disp-inline.on { background: var(--bg); color: var(--fg); box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+.ctrl-disp-inline svg { width: 16px; height: 16px; display: block; }
+
+/* Drawer — jasny, neutralny */
+.ctrl-bd {
+  position: fixed; left: 0; right: 0; top: 0; bottom: 0;
+  background: rgba(0,0,0,0.18);
+  z-index: 80;
+  animation: ctrl-fade 0.15s ease-out;
+}
+.ctrl-dr {
+  position: absolute;
+  left: 24px; right: 24px;
+  top: 100%;
+  margin-top: 6px;
+  background: var(--bg);
+  color: var(--fg);
+  padding: 14px 16px 16px;
+  border: 1px solid var(--border);
+  box-shadow: 0 16px 40px rgba(0,0,0,0.12);
+  z-index: 81;
+  animation: ctrl-slide 0.18s ease-out;
+}
+.ctrl-dr-h {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 12px;
+}
+.ctrl-dr-h .lbl { font-size: 10px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; font-weight: 700; }
+.ctrl-dr-h .x {
+  width: 26px; height: 26px;
+  background: var(--surface);
+  color: var(--muted-2);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  font-size: 18px; line-height: 1;
+  font-weight: 300;
+}
+.ctrl-dr-h .x:hover { background: var(--surface-hover); color: var(--fg); }
+
+/* Drawer Zakres — segmented buttons */
+.ctrl-seg-row { display: flex; gap: 4px; flex-wrap: wrap; }
+.ctrl-seg {
+  background: var(--surface);
+  color: var(--muted-2);
+  border: none;
+  padding: 12px 18px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  line-height: 1.2;
+}
+.ctrl-seg:hover { background: var(--surface-hover); color: var(--fg); }
+.ctrl-seg.on { background: var(--fg); color: var(--bg); }
+
+/* Drawer Kategorie — siatka z naszymi ikonami */
+.ctrl-cats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.ctrl-cat {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px;
+  background: var(--surface);
+  cursor: pointer;
+  min-width: 0;
+  transition: background 0.12s;
+}
+.ctrl-cat:hover { background: var(--surface-hover); }
+.ctrl-cat .ic { width: 18px; height: 18px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.ctrl-cat .ic svg { width: 16px; height: 16px; fill: none; stroke: var(--fg); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.ctrl-cat .nm { font-size: 11px; font-weight: 600; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ctrl-cat.off { opacity: 0.35; }
+.ctrl-cat.off .ic svg { stroke: var(--muted-3); }
+
+@keyframes ctrl-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ctrl-slide { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+
 /* Wykresy: dock chartu na samym dole — tuż nad bnav, bez pustego miejsca */
 .charts-page { display: flex; flex-direction: column; min-height: calc(100dvh - 100px - env(safe-area-inset-bottom)); }
 .charts-dock { margin-top: auto; background: var(--bg); border-top: 1px solid var(--surface-3); padding: 12px 14px 6px; }
@@ -386,54 +721,115 @@ body.big-text .pr-sum .l-sub { font-size: 14px; }
 /* Swipe */
 #app { touch-action: pan-y; will-change: transform; }
 
-/* Anim */
-@keyframes fade-rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes bar-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
-.big-h, .mini-tile, .ichip, .pr, .tx-row, .pr-sum, .tx-month-h, .hero-anim, .shell-hero, .trans-add-tile, .chip {
-  animation: fade-rise 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
-  animation-delay: var(--d, 0ms);
+/* ============== UNIFIED ENTRANCE ANIMATIONS ==============
+   Jeden system: każdy animowalny element opóźnia się o `--anim-d` (przypisywane przez JS po pozycji top-left→bottom-right).
+   Chrome (chr-anim) = animuje tylko gdy widok zmieniony / pierwszy mount.
+   Dane (fr-anim)    = animuje przy każdym render (nowy miesiąc, filtr, sort).
+   .anim-skip override = chrome przy re-render tego samego widoku (JS dodaje gdy isSameView).
+*/
+/* Szybki onset (40% opacity w 20% czasu), łagodne wykończenie */
+@keyframes anim-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  25% { opacity: 0.6; }
+  to   { opacity: 1; transform: translateY(0); }
 }
+@keyframes anim-fade  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes anim-draw  { to { stroke-dashoffset: 0; } }
+@keyframes anim-pop   { from { opacity: 0; transform: scale(0); } to { opacity: 1; transform: scale(1); } }
+@keyframes bar-fill   { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+/* Chrome — animuje raz per mount widoku */
+.big-h, .ctrl-bar, .tl-section-h, .shell-hero, .trans-add-tile, .tx-month-h {
+  opacity: 0;
+  animation: anim-enter 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: var(--anim-d, 0ms);
+}
+
+/* Dane — animuje przy każdym render */
+.hero-anim, .mini-tile, .tile-mid, .tx-row, .pr, .pr-sum, .ichip, .chip {
+  opacity: 0;
+  animation: anim-enter 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: var(--anim-d, 0ms);
+}
+
+/* Plan bar fill (subordinate do .pr — zachowuje swój efekt fill po fade-rise) */
+/* `both` = utrzymuj stan from PRZED delay (scaleX(0) = pusty), nie scaleX(1) (pełny) */
 .pr .bar > div {
   transform-origin: left center;
-  animation: bar-fill 1.0s cubic-bezier(0.16, 1, 0.3, 1) both;
-  animation-delay: var(--d2, 400ms);
+  animation: bar-fill 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(var(--anim-d, 0ms) + 250ms);
 }
-.pr-sum { animation-delay: 700ms; }
-body.no-shell-anim .big-h,
-body.no-shell-anim .ichip,
-body.no-shell-anim .chip,
-body.no-shell-anim .shell-hero { animation: none !important; }
 
-/* Chart anim */
-@keyframes draw-line { to { stroke-dashoffset: 0; } }
-@keyframes scale-in { from { opacity: 0; transform: scale(0); } to { opacity: 1; transform: scale(1); } }
-@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+/* Chart — używają wspólnego var, ale każdy ma swoją keyframe + offset wewnątrz sekwencji line→area→dot */
+.chart-grid {
+  opacity: 0;
+  animation: anim-fade 0.5s ease-out forwards;
+  animation-delay: var(--anim-d, 0ms);
+}
+.chart-xtick {
+  opacity: 0;
+  animation: anim-enter 0.5s ease-out forwards;
+  animation-delay: var(--anim-d, 0ms);
+}
 .chart-line {
   stroke-dasharray: 1000;
   stroke-dashoffset: 1000;
-  animation: draw-line 1.4s cubic-bezier(0.16, 1, 0.3, 1) 300ms both;
+  animation: anim-draw 1.0s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: var(--anim-d, 0ms);
 }
 .chart-area {
   opacity: 0;
-  animation: fade-in 1s cubic-bezier(0.16, 1, 0.3, 1) 900ms both;
+  animation: anim-fade 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: calc(var(--anim-d, 0ms) + 600ms);
 }
 .chart-dot {
   opacity: 0;
   transform-origin: center;
   transform-box: fill-box;
-  animation: scale-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) 1600ms both;
+  animation: anim-pop 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: calc(var(--anim-d, 0ms) + 1000ms);
 }
-.chart-grid { opacity: 0; animation: fade-in 0.7s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: var(--d, 100ms); }
-.chart-xtick { opacity: 0; animation: fade-rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: var(--d, 400ms); }
 
-/* Timeline anim */
-.tl-month, .tl-box {
-  animation: fade-rise 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
-  animation-delay: var(--d, 0ms);
+/* Skip — chrome przy re-render tego samego widoku (JS dodaje klasę) */
+.anim-skip {
+  opacity: 1 !important;
+  animation: none !important;
+  transform: none !important;
 }
-.tl-now-dot { opacity: 0; animation: fade-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) 600ms both; }
+.anim-skip.pr .bar > div { animation: none !important; transform: none !important; }
 
 body.fonts-loading #app { visibility: hidden; }
+
+/* === HEATMAP (Wykresy / tryb 3) === */
+.heatmap-wrap { padding: 16px 24px 24px; }
+.heatmap { display: flex; flex-direction: column; gap: 5px; }
+.hm-row { display: grid; grid-template-columns: 32px repeat(12, 1fr); gap: 4px; align-items: stretch; }
+.hm-yr { font-size: 10px; letter-spacing: 1.2px; text-transform: uppercase; font-weight: 700; color: var(--muted); text-align: center; align-self: center; }
+.hm-cell {
+  min-height: 42px;
+  background: var(--accent);
+  opacity: var(--intensity, 0);
+  border-radius: 3px;
+  position: relative;
+}
+.hm-cell.zero { background: var(--surface-3); opacity: 1; }
+.hm-cell.future { background: transparent; }
+.hm-cell.none { background: transparent; }
+.hm-cell.curr {
+  opacity: 1;
+  background: var(--accent);
+  outline: 2px solid var(--fg);
+  outline-offset: -2px;
+}
+.hm-labels { margin-top: 10px; }
+.hm-labels .hm-cell { min-height: 0; }
+.hm-label { font-size: 8px; font-weight: 700; color: var(--muted); text-align: center; letter-spacing: 0.4px; }
+.hm-legend { display: flex; align-items: center; gap: 10px; margin-top: 22px; font-size: 9px; color: var(--muted); letter-spacing: 0.8px; text-transform: uppercase; font-weight: 700; }
+.hm-legend-scale {
+  width: 90px; height: 10px; border-radius: 2px;
+  background: linear-gradient(to right, var(--surface-3), var(--accent));
+}
+.hm-legend-max { margin-left: auto; font-weight: 600; letter-spacing: 0.3px; text-transform: none; }
 
 /* Month picker */
 .mp-bg { position: fixed; inset: 0; z-index: 60; display: none; }
