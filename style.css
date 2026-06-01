@@ -120,12 +120,7 @@ body.big-text {
 .plan-tile.bar .plan-tile-sub,
 .mini-tile .a .planned,
 .tile-mid-v .planned,
-.hm-yr,
-.hm-label,
-.hm-legend,
 .plan-donut-pct,
-text.chart-grid,
-text.chart-xtick,
 /* NAME */
 .hero-stat-v,
 .pr .name,
@@ -826,6 +821,11 @@ body.kp-open #add-sheet { padding-bottom: var(--kp-h, 280px); }
 .kp-arow .k.shift svg path { fill: currentColor; stroke: none; }
 .kp-arow.pl-row .k { font-size: 16px; color: var(--muted-2); }
 
+/* Modal form inputs — wspólny styl pól (Dodaj + Edytuj lightbox) */
+.fld-input { width: 100%; border: none; border-bottom: 1px solid #ddd; padding: 6px 0; outline: none; }
+.fld-input.txt { font-size: var(--txt-name-size); font-weight: var(--txt-name-weight); }
+.fld-input.amt { font-family: 'Anton'; font-size: var(--txt-amt-sm); letter-spacing: var(--txt-amt-sm-lsp); background: transparent; }
+
 /* Month picker grid (w modal Dodaj) */
 .month-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .month-cell { padding: 10px 4px; text-align: center; font-size: var(--txt-meta-size); font-weight: var(--txt-meta-weight); letter-spacing: 1px; text-transform: uppercase; color: var(--muted-2); background: var(--surface); border-radius: 6px; cursor: pointer; user-select: none; transition: background 0.12s; }
@@ -881,35 +881,11 @@ body.kp-open #add-sheet { padding-bottom: var(--kp-h, 280px); }
   animation-delay: calc(var(--anim-d, 0ms) + 250ms);
 }
 
-/* Chart — używają wspólnego var, ale każdy ma swoją keyframe + offset wewnątrz sekwencji line→area→dot */
-.chart-grid {
-  opacity: 0;
-  animation: anim-fade 0.5s ease-out forwards;
-  animation-delay: var(--anim-d, 0ms);
-}
-.chart-xtick {
-  opacity: 0;
-  animation: anim-enter 0.5s ease-out forwards;
-  animation-delay: var(--anim-d, 0ms);
-}
-text.chart-grid, text.chart-xtick { font-size: var(--txt-meta-size); font-weight: var(--txt-meta-weight); letter-spacing: var(--txt-meta-lsp); }
-.chart-line {
-  stroke-dasharray: 1000;
-  stroke-dashoffset: 1000;
-  animation: anim-draw 1.0s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  animation-delay: var(--anim-d, 0ms);
-}
+/* Chart blob — fade entrance dla żółtego wypełnienia */
 .chart-area {
   opacity: 0;
   animation: anim-fade 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  animation-delay: calc(var(--anim-d, 0ms) + 600ms);
-}
-.chart-dot {
-  opacity: 0;
-  transform-origin: center;
-  transform-box: fill-box;
-  animation: anim-pop 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  animation-delay: calc(var(--anim-d, 0ms) + 1000ms);
+  animation-delay: calc(var(--anim-d, 0ms) + 200ms);
 }
 
 /* Skip — chrome przy re-render tego samego widoku (JS dodaje klasę) */
@@ -921,37 +897,6 @@ text.chart-grid, text.chart-xtick { font-size: var(--txt-meta-size); font-weight
 .anim-skip.pr .bar > div { animation: none !important; transform: none !important; }
 
 body.fonts-loading #app { visibility: hidden; }
-
-/* === HEATMAP (Wykresy / tryb 3) === */
-.heatmap-wrap { padding: 16px 24px 24px; }
-.heatmap { display: flex; flex-direction: column; gap: 5px; }
-.hm-row { display: grid; grid-template-columns: 32px repeat(12, 1fr); gap: 4px; align-items: stretch; }
-.hm-yr { font-size: var(--txt-meta-size); letter-spacing: var(--txt-meta-lsp); text-transform: uppercase; font-weight: var(--txt-meta-weight); color: var(--muted); text-align: center; align-self: center; }
-.hm-cell {
-  min-height: 42px;
-  background: var(--accent);
-  opacity: var(--intensity, 0);
-  border-radius: 3px;
-  position: relative;
-}
-.hm-cell.zero { background: var(--surface-3); opacity: 1; }
-.hm-cell.future { background: transparent; }
-.hm-cell.none { background: transparent; }
-.hm-cell.curr {
-  opacity: 1;
-  background: var(--accent);
-  outline: 2px solid var(--fg);
-  outline-offset: -2px;
-}
-.hm-labels { margin-top: 10px; }
-.hm-labels .hm-cell { min-height: 0; }
-.hm-label { font-size: var(--txt-meta-size); font-weight: var(--txt-meta-weight); color: var(--muted); text-align: center; letter-spacing: var(--txt-meta-lsp); text-transform: uppercase; }
-.hm-legend { display: flex; align-items: center; gap: 10px; margin-top: 22px; font-size: var(--txt-meta-size); color: var(--muted); letter-spacing: var(--txt-meta-lsp); text-transform: uppercase; font-weight: var(--txt-meta-weight); }
-.hm-legend-scale {
-  width: 90px; height: 10px; border-radius: 2px;
-  background: linear-gradient(to right, var(--surface-3), var(--accent));
-}
-.hm-legend-max { margin-left: auto; font-weight: 600; letter-spacing: 0.5px; text-transform: none; font-family: 'Inter', sans-serif; }
 
 /* Month picker */
 .mp-bg { position: fixed; inset: 0; z-index: 60; display: none; }

@@ -215,7 +215,6 @@ const STATE = {
   view: 'home',         // home | plan | trans | charts | timeline
   yr: new Date().getFullYear(),
   mi: new Date().getMonth() + 1,  // 1-12 — domyślnie bieżący mc
-  filter: null,         // category filter
   transShowAll: false,  // Trans: pokaż wszystkie chipy kategorii po kliknięciu "więcej"
   chartCat: 'Firma',    // for charts view
   chartZakres: '1',     // Wykresy zakres: '1' (bieżący rok) | '2' (ten + poprzedni) | 'all' (wszystkie)
@@ -223,8 +222,6 @@ const STATE = {
   tlZakres: '2',        // Timeline zakres: '1' | '2' | '3' | 'all' (lata wstecz)
   uiHiddenCatsHist: {},  // Historia: ukryte kategorie {kat: true}
   uiHiddenCatsTrans: {}, // Transakcje: ukryte kategorie (niezależne od Historii)
-  uiHiddenCatsHome: {},  // Home: ukryte kategorie (filtruje Stałe/Naduch/Alerty) — nieużywane obecnie
-  uiHiddenCatsPlan: {},  // Plan: ukryte kategorie (filtruje listę CATS) — nieużywane obecnie
   uiDisplayHome: 'grid3',  // tryb kafli per view — osobny dla każdej
   uiDisplayTrans: 'grid3',
   uiDisplayHist: 'grid3',
@@ -702,10 +699,6 @@ async function loadData() {
   if (hcH) { try { STATE.uiHiddenCatsHist = JSON.parse(hcH) || {}; } catch (_) {} }
   const hcT = localStorage.getItem('uiHiddenCatsTrans');
   if (hcT) { try { STATE.uiHiddenCatsTrans = JSON.parse(hcT) || {}; } catch (_) {} }
-  const hcHm = localStorage.getItem('uiHiddenCatsHome');
-  if (hcHm) { try { STATE.uiHiddenCatsHome = JSON.parse(hcHm) || {}; } catch (_) {} }
-  const hcP = localStorage.getItem('uiHiddenCatsPlan');
-  if (hcP) { try { STATE.uiHiddenCatsPlan = JSON.parse(hcP) || {}; } catch (_) {} }
   const tm = localStorage.getItem('themeMode');
   if (tm === 'auto' || tm === 'light' || tm === 'dark') STATE.themeMode = tm;
   applyTheme();
@@ -888,8 +881,6 @@ function getYearBounds() {
   all.forEach(w => { if (w.rok < min) min = w.rok; if (w.rok > max) max = w.rok; });
   return { min, max };
 }
-function canGoYearPrev() { const b = getYearBounds(); return !b || STATE.yr - 1 >= b.min; }
-function canGoYearNext() { const b = getYearBounds(); return !b || STATE.yr + 1 <= b.max; }
 
 // Materializacja: dla każdego monthly template bez wpisu (rok, mi) → utwórz wpis z kwota=0
 async function materializeMonth(yr = STATE.yr, mi = STATE.mi) {
@@ -980,10 +971,6 @@ async function materializeOneTemplate(tpl, yr = STATE.yr, mi = STATE.mi) {
 function getNadchodzaceWpisy(yr = STATE.yr) {
   // Wszystkie nadchodzace dla roku, włącznie z miesiącami przeszłymi (history)
   return getAllWpisy().filter(w => w.typ === 'nadchodzace' && w.rok === yr);
-}
-
-function getTransakcjeWpisy(yr = STATE.yr, mi = STATE.mi) {
-  return getMonthWpisy(yr, mi).filter(w => w.typ === 'transakcja');
 }
 
 function getAlerts(yr = STATE.yr, mi = STATE.mi, lookbackYears = 2) {
@@ -2151,7 +2138,7 @@ function renderTimeline() {
 // === UNIFIED ENTRANCE ANIMATIONS ===
 // Chrome (raz per mount widoku) vs dane (zawsze). Sortuje wszystko po pozycji top-left → bottom-right.
 const ANIM_CHROME_SEL = '.big-h, .ctrl-bar, .tl-section-h, .shell-hero, .trans-add-tile, .tx-month-h';
-const ANIM_DATA_SEL = '.hero-anim, .mini-tile, .tile-mid, .tx-row, .pr, .pr-sum, .plan-tile, .plan-donut, .ichip, .chip, .chart-line, .chart-area, .chart-dot, .chart-grid, .chart-xtick';
+const ANIM_DATA_SEL = '.hero-anim, .mini-tile, .tile-mid, .tx-row, .pr, .pr-sum, .plan-tile, .plan-donut, .ichip, .chip, .chart-area';
 const ANIM_ALL_SEL = ANIM_CHROME_SEL + ', ' + ANIM_DATA_SEL;
 
 function runEntranceAnims(isSameView) {
@@ -2375,7 +2362,7 @@ function renderEditBody() {
   // Nazwa
   body.appendChild(el('div', { style: 'margin-bottom:12px' }, [
     el('div', { class: 'caps-i', style: 'margin-bottom:6px' }, ['Nazwa']),
-    el('input', { type: 'text', value: editState.nazwa, style: 'width:100%;border:none;border-bottom:1px solid #ddd;padding:6px 0;font-size:var(--txt-name-size);font-weight:var(--txt-name-weight);outline:none', oninput: (e) => editState.nazwa = e.target.value }),
+    el('input', { type: 'text', value: editState.nazwa, class: 'fld-input txt', oninput: (e) => editState.nazwa = e.target.value }),
   ]));
 
   // Kwota główna ("Zapłacona" dla wpisów z templatem, "Kwota" dla transakcji)
@@ -2429,7 +2416,7 @@ function renderEditBody() {
         el('input', {
           type: 'number', inputmode: 'decimal', placeholder: '0',
           value: editState.kwota_partnera || '',
-          style: 'width:100%;border:none;border-bottom:1px solid #ddd;padding:6px 0;font-family:Anton;font-size:var(--txt-amt-sm);letter-spacing:var(--txt-amt-sm-lsp);outline:none;background:transparent',
+          class: 'fld-input amt',
           oninput: (e) => editState.kwota_partnera = Number(e.target.value) || 0,
         }),
       ]));
@@ -2655,7 +2642,7 @@ function renderAddBody() {
   // 2. NAZWA
   body.appendChild(el('div', { style: 'margin-bottom:16px' }, [
     el('div', { class: 'caps-i', style: 'margin-bottom:6px' }, ['Nazwa']),
-    el('input', { type: 'text', placeholder: addState.tryb === 'stale' ? 'np. Netflix' : 'np. Tankowanie · Orlen', value: addState.nazwa || '', style: 'width:100%;border:none;border-bottom:1px solid #ddd;padding:6px 0;font-size:var(--txt-name-size);font-weight:var(--txt-name-weight);outline:none', oninput: (e) => addState.nazwa = e.target.value }),
+    el('input', { type: 'text', placeholder: addState.tryb === 'stale' ? 'np. Netflix' : 'np. Tankowanie · Orlen', value: addState.nazwa || '', class: 'fld-input txt', oninput: (e) => addState.nazwa = e.target.value }),
   ]));
 
   // 3. KATEGORIA
@@ -2695,7 +2682,7 @@ function renderAddBody() {
         el('input', {
           type: 'number', inputmode: 'decimal', placeholder: '0',
           value: addState.kwota_partnera || '',
-          style: 'width:100%;border:none;border-bottom:1px solid #ddd;padding:6px 0;font-family:Anton;font-size:var(--txt-amt-sm);letter-spacing:var(--txt-amt-sm-lsp);outline:none;background:transparent',
+          class: 'fld-input amt',
           oninput: (e) => addState.kwota_partnera = Number(e.target.value) || 0,
         }),
       ]));
@@ -2928,7 +2915,7 @@ function boot() {
   $$('.nav-item').forEach(n => {
     n.addEventListener('click', () => {
       const v = n.getAttribute('data-view');
-      STATE.view = v; STATE.filter = null; render();
+      STATE.view = v; render();
     });
   });
   $('#gear-btn').addEventListener('click', () => { showSheet('settings-sheet'); syncSettingsUi(); refreshBackupStatus(); });
