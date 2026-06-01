@@ -2883,12 +2883,16 @@ const Keypad = {
       body = `<div class="kp-alpha">${r0}${rNums}${bottom}</div>`;
     }
     root.innerHTML = head + body;
-    // Tap feedback via JS — iOS :active jest nieprzewidywalny, używamy klasy .pressed
+    // Tap feedback via JS — iOS :active jest nieprzewidywalny, używamy keyframe animation
+    // przez klasę .pressed (CSS @keyframes kp-press / kp-press-alpha 220ms bounce)
     root.onpointerdown = (e) => {
       const t = e.target.closest('[data-k]');
       if (!t) return;
+      t.classList.remove('pressed');  // reset jeśli klikamy szybko ten sam
+      // Force reflow żeby re-trigger animacji
+      void t.offsetWidth;
       t.classList.add('pressed');
-      setTimeout(() => t.classList.remove('pressed'), 140);
+      setTimeout(() => t.classList.remove('pressed'), 230);
     };
     root.onclick = (e) => {
       const t = e.target.closest('[data-k]');
