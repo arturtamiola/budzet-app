@@ -2796,7 +2796,7 @@ const Keypad = {
     input.setAttribute('inputmode', 'none');
     this.active = { input, mode, val: String(input.value || ''), shift: false, alphaSub: null };
     document.body.classList.add('kp-open');
-    document.documentElement.style.setProperty('--kp-h', (mode === 'alpha' ? 320 : 280) + 'px');
+    document.documentElement.style.setProperty('--kp-h', (mode === 'alpha' ? 280 : 240) + 'px');
     this.render();
   },
 
@@ -2891,22 +2891,21 @@ const Keypad = {
 
 // Auto-wire: na mobile każdy input[type=number] (kwota) i input[type=text] (notatka) w modalach
 // otwiera keypad. Wyjątek: #cloud-token-input — admin pole, zostaje systemowe.
+// Pointerdown + preventDefault → preempt focus → systemowa klawiatura nigdy się nie pokazuje
+// (click leciał ZA focus, więc systemowa klawiatura migała przy pierwszym tapie).
 function autoWireKeypad() {
   if (!Keypad.isMobile) return;
-  document.addEventListener('click', (e) => {
+  const isKeypadInput = (el) => {
+    if (!el || el.tagName !== 'INPUT') return false;
+    if (el.id === 'cloud-token-input') return false;
+    return el.type === 'number' || el.type === 'text';
+  };
+  document.addEventListener('pointerdown', (e) => {
     const inp = e.target.closest('input[type="number"], input[type="text"]');
-    if (!inp) return;
-    if (inp.id === 'cloud-token-input') return;
+    if (!isKeypadInput(inp)) return;
+    e.preventDefault();  // blokuje focus → systemowa klawiatura nie startuje
     const mode = inp.type === 'number' ? 'numeric' : 'alpha';
     Keypad.open(inp, mode);
-  }, true);
-  // Zamknij keypad kliknięciem poza modalem i poza keypadem
-  document.addEventListener('click', (e) => {
-    if (!Keypad.active) return;
-    if (e.target.closest('#keypad-root')) return;
-    if (e.target.closest('input[type="number"], input[type="text"]')) return;
-    // Klik na inny element w modalu — nie zamykaj agresywnie, niech keypad zostanie
-    // Zamykamy tylko po explicit CONFIRM lub gdy modal się zamyka
   }, true);
 }
 

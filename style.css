@@ -794,24 +794,36 @@ body.big-text #app .anton.num { font-size: 110px !important; letter-spacing: -3.
 .clock-center-sub { font-size: var(--txt-meta-size); font-weight: var(--txt-meta-weight); letter-spacing: var(--txt-meta-lsp); color: var(--muted); font-family: 'Inter'; margin-top: 8px; }
 
 /* === CUSTOM KEYPAD (mobile only) === */
-#keypad-root { position: fixed; left: 0; right: 0; bottom: 0; z-index: 9999; background: var(--surface); border-top: 1px solid var(--surface-3); display: none; flex-direction: column; box-shadow: 0 -2px 12px rgba(0,0,0,0.08); }
-body.kp-open #keypad-root { display: flex; }
-body.kp-open #add-sheet { padding-bottom: var(--kp-h, 280px); }
-.kp-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; border-bottom: 1px solid var(--surface-3); background: var(--bg); }
-.kp-echo { font-family: 'Anton'; font-size: 22px; letter-spacing: -0.6px; color: var(--fg); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.kp-echo.alpha { font-family: 'Inter'; font-size: 16px; font-weight: 600; letter-spacing: 0; }
+#keypad-root {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 9999;
+  background: var(--surface); border-top: 1px solid var(--surface-3);
+  display: flex; flex-direction: column;
+  box-shadow: 0 -2px 12px rgba(0,0,0,0.08);
+  /* Safe area: paski telefonu + buffer 30px (5-10% wysokości) */
+  padding-bottom: max(env(safe-area-inset-bottom), 30px);
+  /* Slide-in: stoi schowany pod dolną krawędzią, ujawnia się przez transform */
+  transform: translateY(100%);
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+  visibility: hidden;
+}
+body.kp-open #keypad-root { transform: translateY(0); pointer-events: auto; visibility: visible; }
+body.kp-open #add-sheet { padding-bottom: var(--kp-h, 260px); }
+.kp-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 14px; border-bottom: 1px solid var(--surface-3); background: var(--bg); }
+.kp-echo { font-family: 'Anton'; font-size: 20px; letter-spacing: -0.5px; color: var(--fg); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kp-echo.alpha { font-family: 'Inter'; font-size: 15px; font-weight: 600; letter-spacing: 0; }
 .kp-echo .gh { color: var(--muted-3); }
-.kp-confirm { background: var(--accent); color: var(--fg); padding: 10px 22px; font-family: 'Anton'; font-size: 18px; letter-spacing: 0.5px; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
-.kp-confirm svg { width: 16px; height: 16px; stroke: var(--fg); fill: none; stroke-width: 2.5; }
+.kp-confirm { background: var(--accent); color: var(--fg); padding: 8px 18px; font-family: 'Anton'; font-size: 17px; letter-spacing: 0.5px; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.kp-confirm svg { width: 14px; height: 14px; stroke: var(--fg); fill: none; stroke-width: 2.5; }
 .kp-num { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--surface-3); flex: 1; }
-.kp-num .k { background: var(--bg); display: flex; align-items: center; justify-content: center; font-family: 'Anton'; font-size: 28px; letter-spacing: -0.4px; color: var(--fg); cursor: pointer; user-select: none; }
-.kp-num .k:active { background: var(--surface); }
-.kp-num .k.aux { color: var(--muted); font-size: 22px; }
-.kp-num .k.del svg { width: 24px; height: 24px; fill: none; stroke: var(--fg); stroke-width: 2; }
-.kp-alpha { display: flex; flex-direction: column; gap: 6px; padding: 8px 6px; flex: 1; background: var(--surface); }
-.kp-arow { display: flex; gap: 4px; justify-content: center; flex: 1; }
-.kp-arow .k { flex: 1; background: var(--bg); display: flex; align-items: center; justify-content: center; font-family: 'Inter'; font-size: 17px; font-weight: 600; color: var(--fg); cursor: pointer; user-select: none; border: 1px solid var(--surface-3); min-height: 38px; }
-.kp-arow .k:active { background: var(--surface); }
+.kp-num .k { background: var(--bg); display: flex; align-items: center; justify-content: center; font-family: 'Anton'; font-size: 26px; letter-spacing: -0.4px; color: var(--fg); cursor: pointer; user-select: none; transition: background 0.05s, transform 0.08s ease-out; min-height: 48px; }
+.kp-num .k:active { background: var(--accent); color: var(--fg); transform: scale(1.06); }
+.kp-num .k.aux { color: var(--muted); font-size: 20px; }
+.kp-num .k.del svg { width: 22px; height: 22px; fill: none; stroke: var(--fg); stroke-width: 2; }
+.kp-alpha { display: flex; flex-direction: column; gap: 4px; padding: 6px 4px; flex: 1; background: var(--surface); }
+.kp-arow { display: flex; gap: 3px; justify-content: center; flex: 1; }
+.kp-arow .k { flex: 1; background: var(--bg); display: flex; align-items: center; justify-content: center; font-family: 'Inter'; font-size: 16px; font-weight: 600; color: var(--fg); cursor: pointer; user-select: none; border: 1px solid var(--surface-3); min-height: 36px; transition: background 0.05s, transform 0.08s ease-out; }
+.kp-arow .k:active { background: var(--accent); transform: scale(1.08); }
 .kp-arow .k.wide { flex: 1.4; }
 .kp-arow .k.space { flex: 5; }
 .kp-arow .k.mode, .kp-arow .k.shift, .kp-arow .k.del { background: var(--surface); color: var(--muted); }
