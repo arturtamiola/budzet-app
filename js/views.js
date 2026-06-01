@@ -676,11 +676,11 @@ function renderDotsChart(points) {
         const linePath = ptsInRange.map(d => `${xOf(d.i)},${yOf(d.v)}`).join(' ');
         const dots = ptsInRange.map((d, di) => {
           const isCurMonth = !overlayMode && (d.i + 1) === STATE.mi;
-          const fill = isCurMonth ? 'var(--fg)' : '#FFE600';
+          const fill = isCurMonth ? '#FFE600' : 'var(--fg)';
           const r = isCurMonth ? 6 : 5;
           return `<circle class="chart-pop" style="--d:${baseDelay + 360 + di * 50}ms" cx="${xOf(d.i)}" cy="${yOf(d.v)}" r="${r}" fill="${fill}" stroke="${fill}" stroke-width="1.5"/>`;
         }).join('');
-        return `<polyline class="chart-line-draw" style="--d:${baseDelay + 260}ms" points="${linePath}" fill="none" stroke="#FFE600" stroke-width="1.5" opacity="0.5"/>${dots}`;
+        return `<polyline class="chart-line-draw" style="--d:${baseDelay + 260}ms" points="${linePath}" fill="none" stroke="var(--fg)" stroke-width="1.5" opacity="0.5"/>${dots}`;
       } else {
         const dashList = ['3,2', '2,2', '1,1.5'];
         const dash = dashList[Math.min(ageIdx - 1, dashList.length - 1)];

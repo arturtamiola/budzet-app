@@ -646,9 +646,15 @@ const Keypad = {
     const echoVal = a.val || (a.mode === 'numeric' ? '0' : '');
     const ghost = a.mode === 'numeric' ? '<span class="gh"> PLN</span>' : (a.val ? '' : '<span class="gh">tap żeby pisać…</span>');
     const echoCls = a.mode === 'alpha' ? 'kp-echo alpha' : 'kp-echo';
+    // Caret na końcu val (etap 1: tylko wizualnie, kursor zawsze na końcu).
+    // Gdy val pusty + ghost widoczny → caret PRZED ghostem żeby user wiedział gdzie wstawi.
+    const caret = '<span class="kp-caret"></span>';
+    const echoHtml = a.val
+      ? `${this._esc(echoVal)}${caret}${ghost}`
+      : `${caret}${this._esc(echoVal)}${ghost}`;
     const head = `
       <div class="kp-head">
-        <div class="${echoCls}">${this._esc(echoVal)}${ghost}</div>
+        <div class="${echoCls}">${echoHtml}</div>
         <button class="kp-confirm" data-k="CONFIRM"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>OK</button>
       </div>`;
     let body;
