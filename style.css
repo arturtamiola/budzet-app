@@ -721,7 +721,12 @@ body.big-text #app .anton.num { font-size: 110px !important; letter-spacing: -3.
 
 /* Radial blob chart (Wykresy default) */
 .clock-wrap { padding: 16px 0 24px; display: flex; flex-direction: column; align-items: center; gap: 16px; }
-.clock-svg { display: block; width: 100%; }
+/* max-width = okiełznanie na desktopie. Blob jest viewBox 360×360 (kwadrat) — bez capa
+   rozrastał się do 700×700 na desktopie i wypełniał cały ekran. */
+.clock-svg { display: block; width: 100%; max-width: 440px; }
+/* Dots chart na desktopie: cap szerokości + height: auto żeby SVG zachował aspect ratio
+   z viewBox (340×130) zamiast spłaszczać się na pełną szerokość containera */
+.dots-page svg { max-width: 560px; height: auto; margin: 0 auto; }
 .clock-footer { align-self: stretch; text-align: right; padding: 24px 24px 8px; }
 
 /* Dots 2-rzędowe chart (Wykresy bars option) */
@@ -935,3 +940,140 @@ body.fonts-loading #app { visibility: hidden; }
 .diff-add .diff-meta { color: var(--success-2); font-weight: 600; }
 .diff-upd { background: var(--surface-2); border-left: 3px solid var(--accent); }
 .diff-del { background: #fef2f2; border-left: 3px solid var(--danger); text-decoration: line-through; opacity: 0.75; }
+
+/* Mobile default — Settings nav-item ukryty (gear w topbarze jest aktywny) */
+.nav-settings { display: none; }
+
+/* ================================================================
+   DESKTOP LAYOUT — Wariant B: sidebar nav lewa + szerokie content.
+   .bnav transformowana CSS-em w pionową sidebar po lewej.
+   Content area centrowany do max 900px dla czytelności.
+   Keypad ukryty (Web jak na mobile, ale desktop = klawiatura systemowa).
+   Breakpoint 900px — wystarczający na sidebar 220px + content 900px = 1120px min.
+   ================================================================ */
+@media (min-width: 900px) {
+  /* Tło desktop + scrollbar pinned do html.
+     ResizeObserver wykazał że body chwilowo dostaje wewnętrzny scrollbar w trakcie
+     animacji entry (content rect zwęża się o 12px na ~166ms o ~770ms po render).
+     `will-change: transform` na #app (line 812) tworzy nowy scrolling context;
+     body chwilowo go dziedziczy. Fix: scrollbar PRZYBITY do html, body nigdy nie ma
+     własnego — overflow: clip wymusza brak swojego scroll, html.overflow-y: scroll
+     z !important wygrywa nad cascade. */
+  html { background: var(--surface-2, #fafafa); overflow-y: scroll !important; overflow-x: hidden !important; }
+  body { overflow: clip !important; }
+  body {
+    padding-left: 220px;        /* miejsce dla sidebar */
+    padding-bottom: 0;          /* bnav już nie istnieje na dole */
+    background: var(--bg);
+    min-height: 100vh;
+  }
+
+  /* ============ SIDEBAR (transformowana .bnav) ============ */
+  .bnav {
+    position: fixed; top: 0; left: 0; bottom: 0;
+    width: 220px; height: 100vh;
+    flex-direction: column !important;
+    justify-content: flex-start !important;
+    align-items: stretch !important;
+    padding: 28px 12px 24px !important;
+    gap: 4px;
+    border-top: none !important;
+    border-right: 1px solid var(--surface-3);
+    background: var(--surface-2);
+  }
+  /* Brand "Budżet" na górze sidebar — wstawiony pseudo */
+  .bnav::before {
+    content: 'Budżet';
+    display: block;
+    font-family: 'Anton'; font-size: 28px; letter-spacing: -1px;
+    padding: 0 12px 24px; color: var(--fg);
+  }
+  /* Settings link na dole sidebar — widoczny + przyciśnięty na sam dół */
+  .nav-settings { display: flex !important; margin-top: auto !important; }
+
+  /* Nav-item w sidebar = pozioma linia (ikona obok napisu) */
+  .nav-item {
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    gap: 12px !important;
+    padding: 12px 16px !important;
+    border-radius: 6px;
+    width: 100%;
+  }
+  .nav-item:hover { background: var(--surface-3); }
+  .nav-item.active { background: var(--accent); color: var(--accent-fg); }
+  .nav-item.active .circle { background: transparent; }
+  .nav-item .circle {
+    width: 24px !important; height: 24px !important;
+    background: transparent !important;
+    border: none !important;
+  }
+  .nav-item .circle svg {
+    width: 18px !important; height: 18px !important;
+    stroke: currentColor !important;
+  }
+  .nav-item .lbl {
+    font-size: var(--txt-name-size); font-weight: var(--txt-name-weight);
+    letter-spacing: 0.3px; text-transform: none;
+  }
+
+  /* ============ CONTENT AREA ============ */
+  /* Content cap ~700px — slim, czytelne single-line items, pasek topbar nie rozciąga się.
+     Centrowany w pozostałej przestrzeni (po sidebar 220px) przez auto-margin po obu stronach.
+     Na bardzo dużych monitorach reszta screen zostaje pustym tłem — desktop ≠ full-bleed. */
+  #app, .topbar, #ctrls-global {
+    max-width: 700px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  /* ============ FIXED ELEMENTS ============ */
+  /* Overlay backgrounds — full content area (po sidebar 220px do prawej) */
+  .modal-bg, .dlg-bg, .mp-bg {
+    left: 220px !important;
+    width: auto !important;
+    right: 0 !important;
+  }
+  /* Sheet (Dodaj/Ustawienia/Plan-edit) — na desktop NIE full-screen, lecz centrowany panel ~520px */
+  .sheet {
+    top: 40px !important;
+    bottom: 40px !important;
+    height: auto !important;
+    max-height: calc(100vh - 80px) !important;
+    left: 50% !important;
+    right: auto !important;
+    transform: translateX(-50%) !important;
+    width: calc(100% - 280px) !important;
+    max-width: 520px !important;
+    border-radius: 16px !important;
+    box-shadow: 0 12px 48px var(--shadow-modal) !important;
+    overflow: hidden;
+  }
+  /* Override animacji bo używają translate3d od (0,0,0), przy translateX(-50%) muszą uwzględnić */
+  .sheet.show { animation: sheet-rise-d 0.54s cubic-bezier(0.22, 1, 0.36, 1) both !important; }
+  .sheet.show.hiding { animation: sheet-fall-d 0.42s cubic-bezier(0.4, 0, 0.7, 0.2) both !important; }
+  @keyframes sheet-rise-d {
+    from { opacity: 0; transform: translate(-50%, 32px); }
+    to   { opacity: 1; transform: translate(-50%, 0); }
+  }
+  @keyframes sheet-fall-d {
+    from { opacity: 1; transform: translate(-50%, 0); }
+    to   { opacity: 0; transform: translate(-50%, 32px); }
+  }
+  /* Sheet-modal (lightbox Edytuj) — już używa max-width, dopasować centering */
+  .sheet.sheet-modal { max-width: 480px !important; }
+  /* Keypad ukryty na desktop — używamy klawiatury systemowej (Web Animations API z Keypad.isMobile check już to filtruje, ale dla pewności) */
+  #keypad-root { display: none !important; }
+  /* tl-legend-fixed (Historia legend) — w content area */
+  .tl-legend-fixed { left: 220px !important; right: 0 !important; padding-bottom: 24px !important; }
+  /* Toast/sync-pill — centrowane w content area */
+  .toast, .sync-pill {
+    left: calc(220px + (100vw - 220px) / 2) !important;
+  }
+
+  /* Topbar — bez gear (jest w sidebar) */
+  .topbar #gear-btn { display: none; }
+
+  /* Większe content — grid3 mini-tile może być wider, ale layout zostaje 3 col (czytelność) */
+}

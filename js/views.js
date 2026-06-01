@@ -780,7 +780,7 @@ function renderDispSwitch(stateKey, lsKey, opts = DISP_OPTS_DEFAULT) {
     class: 'ctrl-disp-inline' + (current === val ? ' on' : ''),
     onclick: () => {
       STATE[stateKey] = val;
-      try { localStorage.setItem(lsKey, val); } catch (_) {}
+      try { localStorage.setItem(lsKey + viewportSuffix(), val); } catch (_) {}
       render();
     },
     html: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${svgInner}</svg>`,

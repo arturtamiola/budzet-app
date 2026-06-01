@@ -34,6 +34,13 @@ const CAT_COLOR = {
 };
 const catColor = k => CAT_COLOR[k] || '#94a3b8';
 
+// Viewport detection — sufiks dla localStorage kluczy display/filter, żeby mobile i desktop
+// trzymały osobne preferencje (np. inny tryb kafli per widok).
+// Match z breakpointem w style.css @media (min-width: 900px).
+function viewportSuffix() {
+  return window.matchMedia && window.matchMedia('(min-width: 900px)').matches ? '_d' : '_m';
+}
+
 // ============== STATE ==============
 const STATE = {
   data: null,           // loaded from dane.json
@@ -515,19 +522,22 @@ async function loadData() {
     const v = localStorage.getItem(k);
     if (v !== null) STATE[k] = v === 'true';
   });
-  // Display mode per view — osobne klucze; fallback: stary 'uiDisplay' → wszystkie 3 widoki
+  // Display mode per view — osobne klucze + sufiks per viewport (_m mobile / _d desktop).
+  // Fallback: klucz bez sufiksu (legacy) → potem stary 'uiDisplay' → wszystkie 3 widoki.
+  const sfx = viewportSuffix();
   const legacyDisp = localStorage.getItem('uiDisplay');
   const isValidDisp = v => v === 'list' || v === 'grid2' || v === 'grid3';
   ['Home', 'Trans', 'Hist'].forEach(view => {
-    const v = localStorage.getItem('uiDisplay' + view) || legacyDisp;
-    if (isValidDisp(v)) STATE['uiDisplay' + view] = v;
+    const k = 'uiDisplay' + view;
+    const v = localStorage.getItem(k + sfx) || localStorage.getItem(k) || legacyDisp;
+    if (isValidDisp(v)) STATE[k] = v;
   });
   // Plan ma własny zestaw opcji (list/bar/donut)
-  const planD = localStorage.getItem('uiDisplayPlan');
+  const planD = localStorage.getItem('uiDisplayPlan' + sfx) || localStorage.getItem('uiDisplayPlan');
   if (planD === 'list' || planD === 'bar' || planD === 'donut') STATE.uiDisplayPlan = planD;
   // Charts: line (blob) / bars (dots) — default line
   STATE.uiDisplayCharts = 'line';
-  const chartD = localStorage.getItem('uiDisplayCharts');
+  const chartD = localStorage.getItem('uiDisplayCharts' + sfx) || localStorage.getItem('uiDisplayCharts');
   if (chartD === 'line' || chartD === 'bars') STATE.uiDisplayCharts = chartD;
   const tlZ = localStorage.getItem('tlZakres');
   if (tlZ === '1' || tlZ === '2' || tlZ === '3' || tlZ === 'all') STATE.tlZakres = tlZ;

@@ -252,14 +252,16 @@ function syncSettingsUi() {
 }
 
 function boot() {
-  // Nav clicks
+  // Nav clicks — tylko items z data-view (nav-settings nie ma, ma własny handler niżej)
   $$('.nav-item').forEach(n => {
     n.addEventListener('click', () => {
       const v = n.getAttribute('data-view');
+      if (!v) return;
       STATE.view = v; render();
     });
   });
   $('#gear-btn').addEventListener('click', () => { showSheet('settings-sheet'); syncSettingsUi(); });
+  $('#sidebar-gear')?.addEventListener('click', () => { showSheet('settings-sheet'); syncSettingsUi(); });
   // Filtry toggle — pokazuje/ukrywa .ctrl-host w bieżącym widoku
   try {
     const saved = localStorage.getItem('uiCtrlsOpen');
@@ -360,6 +362,23 @@ function boot() {
   if (window.matchMedia) {
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
       if (STATE.themeMode === 'auto') applyTheme();
+    });
+    // Viewport flip (mobile ↔ desktop) — przeładuj display preferencje z osobnych kluczy localStorage.
+    // Fallback chain: uiDisplay{view}{sfx} → uiDisplay{view} → 'uiDisplay' (legacy) → STATE default.
+    window.matchMedia('(min-width: 900px)').addEventListener('change', () => {
+      const sfx = viewportSuffix();
+      const legacyDisp = localStorage.getItem('uiDisplay');
+      const isValidDisp = v => v === 'list' || v === 'grid2' || v === 'grid3';
+      ['Home', 'Trans', 'Hist'].forEach(view => {
+        const k = 'uiDisplay' + view;
+        const v = localStorage.getItem(k + sfx) || localStorage.getItem(k) || legacyDisp;
+        if (isValidDisp(v)) STATE[k] = v; else STATE[k] = 'grid3';
+      });
+      const planD = localStorage.getItem('uiDisplayPlan' + sfx) || localStorage.getItem('uiDisplayPlan');
+      STATE.uiDisplayPlan = (planD === 'list' || planD === 'bar' || planD === 'donut') ? planD : 'list';
+      const chartD = localStorage.getItem('uiDisplayCharts' + sfx) || localStorage.getItem('uiDisplayCharts');
+      STATE.uiDisplayCharts = (chartD === 'line' || chartD === 'bars') ? chartD : 'line';
+      render();
     });
   }
 
