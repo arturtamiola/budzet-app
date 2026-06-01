@@ -87,6 +87,9 @@
   </div>
 </div>
 
+<!-- CUSTOM KEYPAD (mobile only) — append-on-demand by Keypad.render() -->
+<div id="keypad-root"></div>
+
 <!-- ADD MODAL -->
 <div class="modal-bg" id="modal-bg"></div>
 <div class="sheet" id="add-sheet">
@@ -149,7 +152,7 @@
       </div>
     </div>
     <div class="set-row"><div style="width:100%"><div class="lbl">Cloud token</div><div class="sub">Wymagany do zapisu w Cloud mode. Musi zgadzać się z REQUIRED_TOKEN w Apps Script.</div>
-      <input type="password" id="cloud-token-input" placeholder="Wpisz token…" style="margin-top:6px;width:100%;padding:8px 10px;border:1px solid var(--border-2);border-radius:6px;background:var(--surface);color:var(--fg);font-size:12px;font-family:Inter">
+      <input type="password" id="cloud-token-input" placeholder="Wpisz token…" style="margin-top:6px;width:100%;padding:8px 10px;border:1px solid var(--border-2);border-radius:6px;background:var(--surface);color:var(--fg);font-size:var(--txt-name-size);font-family:Inter">
     </div></div>
     <div class="set-row" id="sync-sheets"><div><div class="lbl">Sync z Google Sheets</div><div class="sub">Pobierz świeże dane z BUDŻET-TEST</div></div><span class="meta" id="sync-status">⟳</span></div>
     <div class="set-row" id="show-diff"><div><div class="lbl">Pokaż lokalne zmiany</div><div class="sub" id="diff-sub">Twoje edycje vs Sheets</div></div><span class="meta">⊟</span></div>
@@ -215,7 +218,7 @@ const STATE = {
   filter: null,         // category filter
   transShowAll: false,  // Trans: pokaż wszystkie chipy kategorii po kliknięciu "więcej"
   chartCat: 'Firma',    // for charts view
-  chartZakres: '1',     // Wykresy zakres: '0.5' | '1' | '2' | 'all' (pół roku/rok/2 lata/całość)
+  chartZakres: '1',     // Wykresy zakres: '1' (bieżący rok) | '2' (ten + poprzedni) | 'all' (wszystkie)
   tlBucket: '3mc',      // Timeline bucket: '3mc' | '6mc' | 'rok'
   tlZakres: '2',        // Timeline zakres: '1' | '2' | '3' | 'all' (lata wstecz)
   uiHiddenCatsHist: {},  // Historia: ukryte kategorie {kat: true}
@@ -225,7 +228,7 @@ const STATE = {
   uiDisplayHome: 'grid3',  // tryb kafli per view — osobny dla każdej
   uiDisplayTrans: 'grid3',
   uiDisplayHist: 'grid3',
-  uiDisplayCharts: 'line',  // 'line' | 'bars' | 'heatmap'
+  uiDisplayCharts: 'line',  // 'line' (blob) | 'bars' (dots)
   uiDisplayPlan: 'list',   // 'list' | 'bar' | 'donut' — Plan ma własny zestaw
   uiOpenDrawer: null,   // null | 'zakres' | 'kategorie' | 'widok' — który drawer kontrolek jest otwarty
   uiCtrlsOpen: true,    // true = pasek filtrów widoczny; false = ukryty (toggle ikoną filtra w topbarze)
@@ -426,8 +429,8 @@ async function exportMonthXlsx() {
     let bg, box, gridEl, hintEl;
     const close = (v) => { bg.remove(); box.remove(); resolve(v); };
     const updateChip = (cell, key) => cell.style.cssText = selected.has(key)
-      ? 'padding:10px 6px;text-align:center;background:var(--accent);color:var(--accent-fg);border-radius:6px;cursor:pointer;font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase'
-      : 'padding:10px 6px;text-align:center;background:var(--surface);color:var(--fg);border-radius:6px;cursor:pointer;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase';
+      ? 'padding:10px 6px;text-align:center;background:var(--accent);color:var(--accent-fg);border-radius:6px;cursor:pointer;font-size:var(--txt-meta-size);font-weight:800;letter-spacing:1px;text-transform:uppercase'
+      : 'padding:10px 6px;text-align:center;background:var(--surface);color:var(--fg);border-radius:6px;cursor:pointer;font-size:var(--txt-meta-size);font-weight:var(--txt-meta-weight);letter-spacing:1px;text-transform:uppercase';
     const updateHint = () => { hintEl.textContent = selected.size ? `${selected.size} mc zaznaczone` : 'Kliknij miesiące, potem Pobierz'; };
     bg = el('div', { class: 'dlg-bg', onclick: () => close(null) });
     gridEl = el('div', { style: 'display:grid;grid-template-columns:repeat(3, 1fr);gap:6px;max-height:45vh;overflow-y:auto;margin-bottom:10px' },
@@ -444,7 +447,7 @@ async function exportMonthXlsx() {
         return cell;
       })
     );
-    hintEl = el('div', { style: 'font-size:10px;color:var(--muted);text-align:center;margin-bottom:14px;letter-spacing:1px;text-transform:uppercase;font-weight:600' }, ['Kliknij miesiące, potem Pobierz']);
+    hintEl = el('div', { style: 'font-size:var(--txt-meta-size);color:var(--muted);text-align:center;margin-bottom:14px;letter-spacing:1px;text-transform:uppercase;font-weight:var(--txt-meta-weight)' }, ['Kliknij miesiące, potem Pobierz']);
     box = el('div', { class: 'dlg-box' }, [
       el('div', { class: 'dlg-title' }, ['Eksport miesięcy']),
       el('div', { class: 'dlg-msg' }, ['Wybierz 1 lub więcej mc. Jeden plik = jeden mc.']),
@@ -688,10 +691,10 @@ async function loadData() {
   // Plan ma własny zestaw opcji (list/bar/donut)
   const planD = localStorage.getItem('uiDisplayPlan');
   if (planD === 'list' || planD === 'bar' || planD === 'donut') STATE.uiDisplayPlan = planD;
-  // Charts ma własny: line/bars/heatmap (default = line)
+  // Charts: line (blob) / bars (dots) — default line
   STATE.uiDisplayCharts = 'line';
   const chartD = localStorage.getItem('uiDisplayCharts');
-  if (chartD === 'line' || chartD === 'bars' || chartD === 'heatmap') STATE.uiDisplayCharts = chartD;
+  if (chartD === 'line' || chartD === 'bars') STATE.uiDisplayCharts = chartD;
   const tlZ = localStorage.getItem('tlZakres');
   if (tlZ === '1' || tlZ === '2' || tlZ === '3' || tlZ === 'all') STATE.tlZakres = tlZ;
   // Hist/Trans hidden cats — osobne klucze; fallback: stary 'uiHiddenCats' → Historia
@@ -1342,7 +1345,7 @@ function renderPlanEditBody() {
     ]),
   ]);
   body.appendChild(sumDiv);
-  body.appendChild(el('div', { id: 'plan-mismatch', style: 'margin-top:10px;text-align:center;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--danger-2);display:none' }, ['']));
+  body.appendChild(el('div', { id: 'plan-mismatch', style: 'margin-top:10px;text-align:center;font-size:var(--txt-meta-size);font-weight:var(--txt-meta-weight);letter-spacing:1px;text-transform:uppercase;color:var(--danger-2);display:none' }, ['']));
 
   // Foot — kwadratowe, styl spójny z DODAJ
   foot.appendChild(el('div', { style: 'display:flex;gap:8px' }, [
@@ -1452,16 +1455,17 @@ function planDonutTile(kat) {
   const r = 14;
   const c = 2 * Math.PI * r;
   const dash = (c * Math.min(100, pct)) / 100;
-  // % bez bold, Inter regular, mniejszy
   const donutHtml = `<svg viewBox="0 0 36 36" width="76" height="76">
     <circle cx="18" cy="18" r="${r}" fill="none" stroke="var(--surface-3)" stroke-width="1.4"/>
     <circle cx="18" cy="18" r="${r}" fill="none" stroke="var(--donut-fg, var(--fg))" stroke-width="1.4"
             stroke-dasharray="${dash} ${c}" stroke-linecap="round"
             transform="rotate(-90 18 18)"/>
-    <text x="18" y="21" text-anchor="middle" font-size="8" font-weight="600" fill="var(--muted)" font-family="Inter" letter-spacing="0.5">${plan > 0 ? pct + '%' : '—'}</text>
   </svg>`;
   return el('div', { class: cls, onclick: () => openPlanEdit() }, [
-    el('div', { class: 'plan-donut-svg', html: donutHtml }),
+    el('div', { class: 'plan-donut-svg' }, [
+      el('span', { html: donutHtml }),
+      el('span', { class: 'plan-donut-pct' }, [plan > 0 ? pct + '%' : '—']),
+    ]),
     el('div', { class: 'plan-donut-nm' }, [kat]),
     el('div', { class: 'plan-donut-amt num' }, [actual > 0 ? fmtAmt(actual) : '—']),
     el('div', { class: 'plan-donut-limit' }, [`/ ${plan > 0 ? fmt(plan) : '0'}`]),
@@ -1503,8 +1507,8 @@ function renderTrans() {
     onclick: () => openAddModal('transakcja'),
     title: 'Dodaj nową transakcję',
   }, [
-    el('span', { style: 'font-family:Anton;font-size:28px;line-height:1;color:var(--muted-2)' }, ['+']),
-    el('span', { style: 'font-size:var(--txt-name-size);font-weight:500;letter-spacing:0.3px;color:var(--muted-2)' }, ['Dodaj transakcję']),
+    el('span', { class: 'trans-add-plus', style: 'font-family:Anton;font-size:28px;line-height:1;color:var(--muted-2)' }, ['+']),
+    el('span', { class: 'trans-add-lbl' }, ['Dodaj transakcję']),
   ]);
 
   // Kontrolki — bez Zakresu (Trans = jeden miesiąc), własny slot kategorii i display
@@ -1567,7 +1571,7 @@ function renderCharts() {
   const mode = STATE.uiDisplayCharts;
 
   // === Kontrolki: 2 dropdowny (Zakres, Kategoria) + display switch — zawsze te same ===
-  const zakresLabels = { '0.5': 'pół roku', '1': 'rok', '2': '2 lata', 'all': 'całość' };
+  const zakresLabels = { '1': 'rok', '2': '2 lata', 'all': 'całość' };
   const trig = (key, label, val) => el('div', {
     class: 'ctrl-trig' + (STATE.uiOpenDrawer === key ? ' on' : ''),
     onclick: () => { STATE.uiOpenDrawer = STATE.uiOpenDrawer === key ? null : key; render(); },
@@ -1600,7 +1604,6 @@ function renderCharts() {
     drawer = drawerWrap([
       drawerHead('Zakres czasowy'),
       el('div', { class: 'ctrl-seg-row' }, [
-        segBtn('pół roku', '0.5'),
         segBtn('rok', '1'),
         segBtn('2 lata', '2'),
         segBtn('całość', 'all'),
@@ -1621,76 +1624,37 @@ function renderCharts() {
   }
 
   // === Branch zawartości chartu po mode ===
-  let chartContent;
-  if (mode === 'heatmap') {
-    chartContent = renderHeatmapChart(cat);
-  } else {
-    // line / bars — wspólne obliczenia points + geometry
-    const monthsCount = { '0.5': 6, '1': 12, '2': 24, 'all': null }[STATE.chartZakres] || 12;
-    let N;
-    if (monthsCount === null) {
-      const bounds = getDataBounds();
-      if (bounds) { N = Math.max(1, STATE.yr * 12 + STATE.mi - bounds.min + 1); } else { N = 12; }
-    } else { N = monthsCount; }
-    const points = [];
-    for (let i = N - 1; i >= 0; i--) {
-      const d = new Date(STATE.yr, STATE.mi - 1 - i, 1);
-      points.push({ yr: d.getFullYear(), mi: d.getMonth() + 1, val: sumCat(cat, d.getFullYear(), d.getMonth() + 1) });
-    }
-    const max = Math.max(...points.map(p => p.val), 100);
-    const yMax = Math.ceil(max / 1000) * 1000;
-    const w = 360, h = 380, padL = 48, padB = 24, padT = 12;
-    const yOf = v => padT + (h - padT - padB) * (1 - v / yMax);
-    const yTicks = [yMax, yMax * 0.75, yMax * 0.5, yMax * 0.25];
-    const maxTicks = points.length > 15 ? 7 : 5;
-    const tickStep = Math.max(1, Math.ceil(points.length / maxTicks));
-    const xTickIdx = [];
-    for (let i = 0; i < points.length; i += tickStep) xTickIdx.push(i);
-    if (xTickIdx[xTickIdx.length - 1] !== points.length - 1) xTickIdx.push(points.length - 1);
-    const yTicksHtml = yTicks.map(v => `<text class="chart-grid" style="fill:var(--muted-4)" x="0" y="${yOf(v) + 3}" font-size="9" font-family="Inter" font-weight="600">${fmt(Math.round(v))} zł</text><line class="chart-grid" style="stroke:var(--surface-3)" x1="${padL}" y1="${yOf(v)}" x2="${w}" y2="${yOf(v)}" stroke-width="1"/>`).join('');
-
-    if (mode === 'bars') {
-      // === BARS ===
-      const slotW = (w - padL) / points.length;
-      const barW = slotW * 0.7;
-      const xTicksHtml = xTickIdx.map(i => `<text class="chart-xtick" style="fill:var(--muted)" x="${padL + (i + 0.5) * slotW}" y="${h + 14}" font-size="8" font-family="Inter" font-weight="600" text-anchor="middle">${ML[points[i].mi - 1].toUpperCase()}${points.length > 12 ? ` '${String(points[i].yr).slice(2)}` : ''}</text>`).join('');
-      const bars = points.map((p, i) => {
-        const x = padL + (i + 0.5) * slotW - barW / 2;
-        const y = yOf(p.val);
-        const barH = (h - padB) - y;
-        return `<rect class="chart-area" x="${x}" y="${y}" width="${barW}" height="${Math.max(0, barH)}" fill="#FFE600"/>`;
-      }).join('');
-      chartContent = el('div', { class: 'charts-dock', style: 'margin-top:32px;padding:0 16px', html: `
-        <svg viewBox="0 0 ${w} ${h + 4}" width="100%" style="display:block">
-          ${yTicksHtml}
-          ${bars}
-          ${xTicksHtml}
-        </svg>` });
+  // Semantyka zakresu — kalendarzowa, nie rolling:
+  //   '1'   = bieżący rok kalendarzowy (Jan–Gru STATE.yr)
+  //   '2'   = ten rok + poprzedni (STATE.yr-1, STATE.yr)
+  //   'all' = wszystkie lata od pierwszego wpisu do STATE.yr
+  let yearsRange;
+  if (STATE.chartZakres === 'all') {
+    const bounds = getDataBounds();
+    if (bounds) {
+      const startYr = Math.floor((bounds.min - 1) / 12);
+      yearsRange = [];
+      for (let y = startYr; y <= STATE.yr; y++) yearsRange.push(y);
     } else {
-      // === LINE (default) ===
-      const xStep = points.length > 1 ? (w - padL) / (points.length - 1) : 0;
-      const path = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${padL + i * xStep},${yOf(p.val)}`).join(' ');
-      const area = `${path} L${padL + (points.length - 1) * xStep},${h - padB} L${padL},${h - padB} Z`;
-      const last = points[points.length - 1];
-      const xTicksHtml = xTickIdx.map(i => `<text class="chart-xtick" style="fill:var(--muted)" x="${padL + i * xStep}" y="${h + 14}" font-size="8" font-family="Inter" font-weight="600">${ML[points[i].mi - 1].toUpperCase()}${points.length > 12 ? ` '${String(points[i].yr).slice(2)}` : ''}</text>`).join('');
-      window.__chartState = { points, padL, xStep, yOf, h, padB, fmt };
-      chartContent = el('div', { class: 'charts-dock', style: 'margin-top:32px;padding:0 16px', html: `
-        <svg id="chart-svg" viewBox="0 0 ${w} ${h + 4}" width="100%" style="display:block;touch-action:none">
-          <defs><linearGradient id="g" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#FFE600" stop-opacity="0.7"/><stop offset="100%" stop-color="#FFE600" stop-opacity="0"/></linearGradient></defs>
-          ${yTicksHtml}
-          <path class="chart-area" d="${area}" fill="url(#g)"/>
-          <path class="chart-line" d="${path}" stroke="#FFE600" stroke-width="2.5" fill="none"/>
-          <circle class="chart-dot" cx="${padL + (points.length - 1) * xStep}" cy="${yOf(last.val)}" r="4" style="fill:var(--fg)"/>
-          ${xTicksHtml}
-          <g id="chart-tip" style="display:none;pointer-events:none">
-            <line x1="0" y1="${padT}" x2="0" y2="${h - padB}" style="stroke:var(--fg)" stroke-width="0.6" stroke-dasharray="2 2" opacity="0.35"/>
-            <circle cx="0" cy="0" r="5" style="fill:var(--fg)"/>
-            <text x="0" y="0" font-family="Anton" font-size="15" style="fill:var(--fg)" text-anchor="middle" letter-spacing="-0.4">0</text>
-          </g>
-          <rect x="${padL}" y="0" width="${w - padL}" height="${h}" fill="transparent" style="cursor:crosshair"
-            onpointermove="chartTipMove(event)" onpointerdown="chartTipMove(event)" onpointerleave="chartTipHide()"/>
-        </svg>` });
+      yearsRange = [STATE.yr];
     }
+  } else if (STATE.chartZakres === '2') {
+    yearsRange = [STATE.yr - 1, STATE.yr];
+  } else {
+    yearsRange = [STATE.yr];
+  }
+  const points = [];
+  yearsRange.forEach(yr => {
+    for (let mi = 1; mi <= 12; mi++) {
+      points.push({ yr, mi, val: sumCat(cat, yr, mi) });
+    }
+  });
+
+  let chartContent;
+  if (mode === 'bars') {
+    chartContent = renderDotsChart(points);
+  } else {
+    chartContent = renderBlobChart(points);
   }
 
   return el('div', { class: 'charts-page' }, [
@@ -1702,91 +1666,207 @@ function renderCharts() {
   ]);
 }
 
-// === HEATMAP: miesiące × lata grid, kolor = intensywność wydatków ===
-function renderHeatmapChart(cat) {
-  const bounds = getDataBounds();
-  if (!bounds) return el('div', { style: 'padding:24px;text-align:center;color:var(--muted);font-size:var(--txt-name-size)' }, ['Brak danych']);
-  const startMonth = bounds.min; // yr*12 + mi
-  const startYr = Math.floor((startMonth - 1) / 12);
-  const startMi = ((startMonth - 1) % 12) + 1;
-  // jeśli startMi nie 1, to nadal całe lata pokazujemy; pierwsze cells przed startMi będą future-like (puste)
-  const endYr = STATE.yr;
-  const years = [];
-  for (let y = endYr; y >= startYr; y--) years.push(y);
+// === BLOB: radial polar chart (12 miesięcy = 12 promieni, kwota = odległość od środka) ===
+const ROMAN_M = ['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII'];
+function niceRingMax(v) {
+  if (v <= 0) return 300;
+  const mag = Math.pow(10, Math.floor(Math.log10(v)));
+  const norm = v / mag;
+  let nice;
+  if (norm <= 1.5) nice = 1.5;
+  else if (norm <= 3) nice = 3;
+  else if (norm <= 6) nice = 6;
+  else nice = 10;
+  return nice * mag;
+}
+function renderBlobChart(points) {
+  const cx = 180, cy = 180, maxR = 140;
+  const monthXY = (mi, r) => {
+    const angle = (-90 + mi * 30) * Math.PI / 180;
+    return [cx + Math.cos(angle) * r, cy + Math.sin(angle) * r];
+  };
+  // Overlay mode tylko gdy zakres > 12 mies (2 lata / całość)
+  const overlayMode = points.length > 12;
+  const maxVal = Math.max(...points.map(p => p.val), 100);
+  const ringMax = niceRingMax(maxVal);
+  const ringStep = ringMax / 3;
+  const valToR = v => Math.min(maxR, (v / ringMax) * maxR);
 
-  // Wszystkie wartości żeby policzyć max (dla skali kolorów)
-  let maxVal = 0;
-  const cells = {};
-  years.forEach(y => {
-    cells[y] = [];
-    for (let m = 1; m <= 12; m++) {
-      const v = sumCat(cat, y, m);
-      cells[y].push(v);
-      if (v > maxVal) maxVal = v;
+  function blobPath(vals) {
+    const pts = vals.map((v, i) => monthXY(i, valToR(v || 0)));
+    const n = pts.length;
+    const mids = pts.map((p, i) => {
+      const next = pts[(i + 1) % n];
+      return [(p[0] + next[0]) / 2, (p[1] + next[1]) / 2];
+    });
+    let path = `M${mids[n - 1][0].toFixed(2)},${mids[n - 1][1].toFixed(2)}`;
+    for (let i = 0; i < n; i++) {
+      path += ` Q${pts[i][0].toFixed(2)},${pts[i][1].toFixed(2)} ${mids[i][0].toFixed(2)},${mids[i][1].toFixed(2)}`;
     }
+    return path + ' Z';
+  }
+
+  // Single mode: jeden vals[12], każdy miesiąc w zakresie na swojej pozycji
+  // Overlay mode: vals[12] per year
+  let curVals, otherYearsVals = [], curYrLabel;
+  if (overlayMode) {
+    const byYear = {};
+    points.forEach(p => {
+      if (!byYear[p.yr]) byYear[p.yr] = new Array(12).fill(0);
+      byYear[p.yr][p.mi - 1] = p.val;
+    });
+    const yearsAsc = Object.keys(byYear).map(Number).sort((a, b) => a - b);
+    const currentYr = byYear[STATE.yr] ? STATE.yr : yearsAsc[yearsAsc.length - 1];
+    curVals = byYear[currentYr];
+    otherYearsVals = yearsAsc.filter(y => y !== currentYr).sort((a, b) => b - a).map(y => byYear[y]);
+    curYrLabel = `${yearsAsc[0]}–${yearsAsc[yearsAsc.length - 1]}`;
+  } else {
+    curVals = new Array(12).fill(0);
+    points.forEach(p => { curVals[p.mi - 1] = p.val; });
+    curYrLabel = STATE.yr;
+  }
+
+  const ringsHtml = [1, 2, 3].map(k => {
+    const r = (k / 3) * maxR;
+    return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--muted-3)" stroke-width="0.75" stroke-dasharray="3,4" opacity="0.8"/>`;
+  }).join('');
+
+  const ringLabelStyle = `font-size:var(--txt-meta-size);font-weight:var(--txt-meta-weight);letter-spacing:var(--txt-meta-lsp);`;
+  const ringLabelsHtml = [1, 2, 3].map(k => {
+    const r = (k / 3) * maxR;
+    const y = cy - r + 3;
+    return `<text x="${cx}" y="${y}" fill="var(--muted)" text-anchor="middle" font-family="Inter" style="${ringLabelStyle}paint-order:stroke;stroke:var(--bg);stroke-width:4px">${fmt(Math.round(ringStep * k))}</text>`;
+  }).join('');
+
+  const overlaysHtml = otherYearsVals.map((vals, idx) => {
+    const op = Math.max(0.25, 0.7 - idx * 0.15);
+    const dash = idx === 0 ? '4,3' : idx === 1 ? '2,2' : '1,2';
+    return `<path d="${blobPath(vals)}" fill="none" stroke="var(--fg)" stroke-width="1.2" stroke-dasharray="${dash}" opacity="${op}"/>`;
+  }).join('');
+
+  const curPath = blobPath(curVals);
+
+  // Labels OUTSIDE rings — X (left) i IV (right) wyrównane do krawędzi paska filtrów (24px padding)
+  const labelR = maxR + 18;
+  const monthLabelStyle = `font-size:var(--txt-meta-size);font-weight:var(--txt-meta-weight);letter-spacing:var(--txt-meta-lsp);`;
+  const monthLabelsHtml = ROMAN_M.map((rom, i) => {
+    const [x, y] = monthXY(i, labelR);
+    const isCurrent = !overlayMode && (i + 1) === STATE.mi;
+    const fill = isCurrent ? 'var(--fg)' : 'var(--muted)';
+    return `<text x="${x.toFixed(1)}" y="${(y + 4).toFixed(1)}" fill="${fill}" text-anchor="middle" font-family="Inter" style="${monthLabelStyle}">${rom}</text>`;
+  }).join('');
+
+  const total = points.reduce((s, p) => s + p.val, 0);
+  const avg = points.length > 0 ? total / points.length : 0;
+
+  return el('div', { class: 'clock-wrap', html: `
+    <svg class="clock-svg" width="100%" viewBox="0 0 360 360">
+      <defs>
+        <radialGradient id="blobGrad" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#FFE600" stop-opacity="0.15"/>
+          <stop offset="60%" stop-color="#FFE600" stop-opacity="0.55"/>
+          <stop offset="100%" stop-color="#FFE600" stop-opacity="0.95"/>
+        </radialGradient>
+      </defs>
+      ${ringsHtml}
+      ${ringLabelsHtml}
+      ${overlaysHtml}
+      <path class="chart-area" d="${curPath}" fill="url(#blobGrad)" stroke="none"/>
+      ${monthLabelsHtml}
+    </svg>
+    <div class="clock-footer">
+      <div class="clock-center-lbl">${curYrLabel} · suma</div>
+      <div class="clock-center-v">${fmt(Math.round(total))}</div>
+      <div class="clock-center-sub">średnio ${fmt(Math.round(avg))} zł</div>
+    </div>
+  ` });
+}
+
+// === DOTS 2-rzędowe: I-VI górny rząd, VII-XII dolny ===
+function renderDotsChart(points) {
+  const overlayMode = points.length > 12;
+  const byYear = {};
+  points.forEach(p => {
+    if (!byYear[p.yr]) byYear[p.yr] = new Array(12).fill(null);
+    byYear[p.yr][p.mi - 1] = p.val;
   });
-  if (maxVal === 0) maxVal = 1; // avoid div/0
+  const yearsAsc = Object.keys(byYear).map(Number).sort((a, b) => a - b);
+  const currentYr = byYear[STATE.yr] ? STATE.yr : yearsAsc[yearsAsc.length - 1];
 
-  return el('div', { class: 'heatmap-wrap' }, [
-    el('div', { class: 'heatmap' }, [
-      ...years.map(y => el('div', { class: 'hm-row' }, [
-        el('div', { class: 'hm-yr' }, [`'${String(y).slice(2)}`]),
-        ...cells[y].map((v, idx) => {
-          const mi = idx + 1;
-          const future = y > endYr || (y === endYr && mi > STATE.mi);
-          const beforeData = y * 12 + mi < startMonth;
-          const isCurr = y === STATE.yr && mi === STATE.mi;
-          const intensity = v > 0 ? (0.15 + 0.85 * (v / maxVal)) : 0;
-          const cls = 'hm-cell'
-            + (future ? ' future' : '')
-            + (beforeData ? ' none' : '')
-            + (isCurr ? ' curr' : '')
-            + (v === 0 && !future && !beforeData ? ' zero' : '');
-          return el('div', {
-            class: cls,
-            style: !future && !beforeData ? `--intensity:${intensity}` : '',
-            title: future ? `${ML_FULL[mi - 1]} ${y} (przyszłe)` : `${ML_FULL[mi - 1]} ${y}: ${fmt(Math.round(v))} zł`,
-          });
-        }),
-      ])),
-      el('div', { class: 'hm-row hm-labels' }, [
-        el('div', { class: 'hm-yr' }, []),
-        ...ML.map(m => el('div', { class: 'hm-label' }, [m.toUpperCase()])),
-      ]),
-    ]),
-    el('div', { class: 'hm-legend' }, [
-      el('span', {}, ['mniej']),
-      el('div', { class: 'hm-legend-scale' }, []),
-      el('span', {}, ['więcej']),
-      el('span', { class: 'hm-legend-max' }, [`max: ${fmt(Math.round(maxVal))} zł`]),
-    ]),
-  ]);
-}
+  const maxVal = Math.max(...points.map(p => p.val), 100);
+  const niceMax = niceRingMax(maxVal);
 
-function chartTipMove(e) {
-  const s = window.__chartState; if (!s) return;
-  const svg = document.getElementById('chart-svg'); if (!svg) return;
-  const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
-  const local = pt.matrixTransform(svg.getScreenCTM().inverse());
-  let i = Math.round((local.x - s.padL) / s.xStep);
-  i = Math.max(0, Math.min(s.points.length - 1, i));
-  const p = s.points[i];
-  const x = s.padL + i * s.xStep;
-  const y = s.yOf(p.val);
-  const tip = svg.querySelector('#chart-tip');
-  tip.style.display = '';
-  const line = tip.querySelector('line');
-  line.setAttribute('x1', x); line.setAttribute('x2', x);
-  const dot = tip.querySelector('circle');
-  dot.setAttribute('cx', x); dot.setAttribute('cy', y);
-  const txt = tip.querySelector('text');
-  txt.setAttribute('x', x);
-  txt.setAttribute('y', Math.max(y - 10, 14));
-  txt.textContent = s.fmt(Math.round(p.val));
-}
-function chartTipHide() {
-  const tip = document.querySelector('#chart-tip');
-  if (tip) tip.style.display = 'none';
+  const w = 340, h = 130, padL = 50, padR = 10, padT = 20, padB = 30;
+  const colW = (w - padL - padR) / 5;
+  const yOf = v => padT + (h - padT - padB) * (1 - v / niceMax);
+
+  const metaStyle = `font-size:var(--txt-meta-size);font-weight:var(--txt-meta-weight);letter-spacing:var(--txt-meta-lsp);`;
+
+  function rowSvg(monthStart) {
+    const range = [0, 1, 2, 3, 4, 5].map(i => monthStart + i);
+    const xOf = mi => padL + (mi - monthStart) * colW;
+
+    const yLines = [0, niceMax / 2, niceMax].map(v => {
+      const y = yOf(v);
+      return `<line x1="${padL}" y1="${y}" x2="${w - padR}" y2="${y}" stroke="var(--surface-3)" stroke-width="1"/>`;
+    }).join('');
+    const yLabels = [0, niceMax / 2, niceMax].map(v => {
+      const y = yOf(v);
+      return `<text x="${padL - 5}" y="${y + 3}" fill="var(--muted-3)" text-anchor="end" font-family="Inter" style="${metaStyle}">${fmt(Math.round(v))}</text>`;
+    }).join('');
+
+    const xLabels = range.map(i => {
+      const x = xOf(i);
+      const isCurrent = !overlayMode && (i + 1) === STATE.mi;
+      const fill = isCurrent ? 'var(--fg)' : 'var(--muted)';
+      return `<text x="${x}" y="${h - 5}" fill="${fill}" text-anchor="middle" font-family="Inter" style="${metaStyle}">${ROMAN_M[i]}</text>`;
+    }).join('');
+
+    const yearsDesc = yearsAsc.slice().sort((a, b) => b - a);
+    const yearLayers = yearsDesc.map((y, ageIdx) => {
+      const isCur = y === currentYr;
+      const vals = byYear[y];
+      const ptsInRange = range.map(i => ({ i, v: vals[i] })).filter(d => d.v !== null);
+      if (ptsInRange.length === 0) return '';
+
+      if (isCur) {
+        const linePath = ptsInRange.map(d => `${xOf(d.i)},${yOf(d.v)}`).join(' ');
+        const dots = ptsInRange.map(d => {
+          const isCurMonth = !overlayMode && (d.i + 1) === STATE.mi;
+          const fill = isCurMonth ? 'var(--fg)' : '#FFE600';
+          const r = isCurMonth ? 6 : 5;
+          return `<circle cx="${xOf(d.i)}" cy="${yOf(d.v)}" r="${r}" fill="${fill}" stroke="${fill}" stroke-width="1.5"/>`;
+        }).join('');
+        return `<polyline points="${linePath}" fill="none" stroke="#FFE600" stroke-width="1.5" opacity="0.5"/>${dots}`;
+      } else {
+        const dashList = ['3,2', '2,2', '1,1.5'];
+        const dash = dashList[Math.min(ageIdx - 1, dashList.length - 1)];
+        return ptsInRange.map(d =>
+          `<circle cx="${xOf(d.i)}" cy="${yOf(d.v)}" r="4" fill="none" stroke="var(--muted-3)" stroke-width="1" stroke-dasharray="${dash}"/>`
+        ).join('');
+      }
+    }).join('');
+
+    return `<svg width="100%" height="${h}" viewBox="0 0 ${w} ${h}" font-family="Inter" style="margin-bottom:14px;display:block">
+      ${yLines}${yLabels}${yearLayers}${xLabels}
+    </svg>`;
+  }
+
+  const total = points.reduce((s, p) => s + p.val, 0);
+  const avg = points.length > 0 ? total / points.length : 0;
+  const curYrLabel = overlayMode ? `${yearsAsc[0]}–${yearsAsc[yearsAsc.length - 1]}` : currentYr;
+
+  return el('div', { class: 'dots-page', html: `
+    <div style="padding:24px 24px 0">
+      ${rowSvg(0)}
+      ${rowSvg(6)}
+    </div>
+    <div class="clock-footer" style="padding:16px 24px 8px">
+      <div class="clock-center-lbl">${curYrLabel} · suma</div>
+      <div class="clock-center-v">${fmt(Math.round(total))}</div>
+      <div class="clock-center-sub">średnio ${fmt(Math.round(avg))} zł</div>
+    </div>
+  ` });
 }
 
 // Timeline: read-only podgląd z opcją usunięcia z alertów (zamiast pełnego edit lightbox)
@@ -1844,11 +1924,10 @@ const DISP_OPTS_PLAN = [
   { val: 'donut', svg: '<circle cx="12" cy="12" r="7.5"/><path d="M12,4.5 A7.5,7.5 0 0,1 19,15" fill="none" stroke-linecap="round" stroke-width="3"/>' },
 ];
 
-// Charts-specific opts: line / bars / heatmap
+// Charts-specific opts: line (blob) / bars (dots)
 const DISP_OPTS_CHARTS = [
-  { val: 'line',    svg: '<polyline points="3 17 8 11 13 14 17 6 21 9" stroke-linecap="round" stroke-linejoin="round"/>' },
+  { val: 'line',    svg: '<path d="M12 4 Q17 4 18 8 Q20 12 18 16 Q15 20 11 19 Q6 18 5 14 Q4 9 8 6 Q10 4 12 4 Z" stroke-linejoin="round"/>' },
   { val: 'bars',    svg: '<rect x="4" y="13" width="3" height="7"/><rect x="9" y="9" width="3" height="11"/><rect x="14" y="4" width="3" height="16"/><rect x="19" y="11" width="3" height="9" fill="none" stroke-width="0"/><rect x="19" y="11" width="2" height="9"/>' },
-  { val: 'heatmap', svg: '<rect x="3" y="3" width="5" height="5"/><rect x="10" y="3" width="5" height="5" fill="currentColor" stroke="none"/><rect x="17" y="3" width="4" height="5"/><rect x="3" y="10" width="5" height="5" fill="currentColor" stroke="none"/><rect x="10" y="10" width="5" height="5"/><rect x="17" y="10" width="4" height="5"/><rect x="3" y="17" width="5" height="4"/><rect x="10" y="17" width="5" height="4"/><rect x="17" y="17" width="4" height="4" fill="currentColor" stroke="none"/>' },
 ];
 
 // Standalone display switch — używany w Home/Trans/Hist/Plan, każdy ma własny slot stanu i opcjonalnie inne opty
@@ -2262,6 +2341,7 @@ function showSheet(id) {
 function closeSheet() {
   $('#modal-bg').classList.remove('show');
   $$('.sheet').forEach(s => s.classList.remove('show'));
+  if (typeof Keypad !== 'undefined' && Keypad.active) Keypad.close();
 }
 
 // ============== LIGHTBOX EDYCJI (Task 8) ==============
@@ -2295,7 +2375,7 @@ function renderEditBody() {
   // Nazwa
   body.appendChild(el('div', { style: 'margin-bottom:12px' }, [
     el('div', { class: 'caps-i', style: 'margin-bottom:6px' }, ['Nazwa']),
-    el('input', { type: 'text', value: editState.nazwa, style: 'width:100%;border:none;border-bottom:1px solid #ddd;padding:6px 0;font-size:16px;font-weight:700;outline:none', oninput: (e) => editState.nazwa = e.target.value }),
+    el('input', { type: 'text', value: editState.nazwa, style: 'width:100%;border:none;border-bottom:1px solid #ddd;padding:6px 0;font-size:var(--txt-name-size);font-weight:var(--txt-name-weight);outline:none', oninput: (e) => editState.nazwa = e.target.value }),
   ]));
 
   // Kwota główna ("Zapłacona" dla wpisów z templatem, "Kwota" dla transakcji)
@@ -2312,7 +2392,7 @@ function renderEditBody() {
     body.appendChild(el('div', { style: 'margin-bottom:18px' }, [
       el('div', { class: 'caps-i', style: 'margin-bottom:6px' }, ['Suma stała (szacunek)']),
       el('div', { style: 'display:flex;align-items:baseline;gap:8px;border-bottom:1px solid #ddd;padding-bottom:6px' }, [
-        el('input', { type: 'number', value: editState.szacunek, inputmode: 'decimal', style: 'flex:1;border:none;outline:none;font-family:Anton;font-size:24px;line-height:1;letter-spacing:-0.6px;background:transparent;color:var(--muted-2);min-width:0;padding:0', oninput: (e) => editState.szacunek = Number(e.target.value) || 0 }),
+        el('input', { type: 'number', value: editState.szacunek, inputmode: 'decimal', style: 'flex:1;border:none;outline:none;font-family:Anton;font-size:var(--txt-amt-lg);line-height:1;letter-spacing:var(--txt-amt-lg-lsp);background:transparent;color:var(--muted-2);min-width:0;padding:0', oninput: (e) => editState.szacunek = Number(e.target.value) || 0 }),
         el('span', { class: 'caps-i', style: 'color:var(--muted)' }, ['PLN']),
       ]),
     ]));
@@ -2340,7 +2420,7 @@ function renderEditBody() {
   // Toggle dzielony + udział partnera + anomalia — tylko dla nie-Stałych (Stałe nie mogą być wspólne/anomalia)
   if (w.typ !== 'stale') {
     body.appendChild(el('div', { style: 'padding:12px 0;border-top:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center;cursor:pointer', onclick: () => { editState.dzielony = !editState.dzielony; renderEditBody(); } }, [
-      el('div', { style: 'font-size:14px;font-weight:600' }, ['Wspólny wydatek ♥']),
+      el('div', { style: 'font-size:var(--txt-name-size);font-weight:600' }, ['Wspólny wydatek ♥']),
       el('span', { class: 'toggle ' + (editState.dzielony ? 'on' : '') }),
     ]));
     if (editState.dzielony) {
@@ -2349,13 +2429,13 @@ function renderEditBody() {
         el('input', {
           type: 'number', inputmode: 'decimal', placeholder: '0',
           value: editState.kwota_partnera || '',
-          style: 'width:100%;border:none;border-bottom:1px solid #ddd;padding:6px 0;font-family:Anton;font-size:20px;letter-spacing:-0.4px;outline:none;background:transparent',
+          style: 'width:100%;border:none;border-bottom:1px solid #ddd;padding:6px 0;font-family:Anton;font-size:var(--txt-amt-sm);letter-spacing:var(--txt-amt-sm-lsp);outline:none;background:transparent',
           oninput: (e) => editState.kwota_partnera = Number(e.target.value) || 0,
         }),
       ]));
     }
     body.appendChild(el('div', { style: 'padding:12px 0;border-top:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center;cursor:pointer', onclick: () => { editState.anomalia = !editState.anomalia; renderEditBody(); } }, [
-      el('div', { style: 'font-size:14px;font-weight:600' }, ['Warto zapamiętać ★']),
+      el('div', { style: 'font-size:var(--txt-name-size);font-weight:600' }, ['Warto zapamiętać ★']),
       el('span', { class: 'toggle ' + (editState.anomalia ? 'on' : '') }),
     ]));
   }
@@ -2363,7 +2443,7 @@ function renderEditBody() {
   // Promote do Nadchodzących (tylko dla alertów = transakcja z anomalia=true)
   if (w.typ === 'transakcja' && w.anomalia) {
     body.appendChild(el('div', { style: 'padding:14px 0;border-top:1px solid #f0f0f0' }, [
-      el('button', { style: 'width:100%;padding:12px;background:var(--accent);border:none;font-family:Anton;font-size:16px;letter-spacing:-0.3px;cursor:pointer', onclick: () => promoteAlertToNadchodzace(w) }, ['Dodaj jako Nadchodzący ↑']),
+      el('button', { style: 'width:100%;padding:12px;background:var(--accent);border:none;font-family:Anton;font-size:var(--txt-amt-sm);letter-spacing:var(--txt-amt-sm-lsp);cursor:pointer', onclick: () => promoteAlertToNadchodzace(w) }, ['Dodaj jako Nadchodzący ↑']),
     ]));
   }
 
@@ -2371,17 +2451,17 @@ function renderEditBody() {
   if (w.typ === 'stale' && w.template_id != null) {
     foot.appendChild(el('div', { style: 'display:flex;gap:8px' }, [
       el('button', {
-        style: 'flex:1;padding:14px;background:var(--card);border:1px solid #ef4444;color:var(--danger-2);cursor:pointer;font-weight:700;font-size:13px;letter-spacing:0.3px',
+        style: 'flex:1;padding:14px;background:var(--card);border:1px solid #ef4444;color:var(--danger-2);cursor:pointer;font-weight:var(--txt-name-weight);font-size:var(--txt-name-size);letter-spacing:0.3px',
         onclick: deleteFromLightbox,
       }, ['Usuń ten miesiąc']),
       el('button', {
-        style: 'flex:1;padding:14px;background:var(--danger-2);border:none;color:#fff;cursor:pointer;font-weight:700;font-size:13px;letter-spacing:0.3px',
+        style: 'flex:1;padding:14px;background:var(--danger-2);border:none;color:#fff;cursor:pointer;font-weight:var(--txt-name-weight);font-size:var(--txt-name-size);letter-spacing:0.3px',
         onclick: deleteWholeTemplate,
       }, ['Usuń całkiem']),
     ]));
   } else {
     foot.appendChild(el('button', {
-      style: 'width:100%;padding:14px;background:var(--card);border:1px solid #ef4444;color:var(--danger-2);cursor:pointer;font-weight:700;font-size:13px;letter-spacing:0.3px',
+      style: 'width:100%;padding:14px;background:var(--card);border:1px solid #ef4444;color:var(--danger-2);cursor:pointer;font-weight:var(--txt-name-weight);font-size:var(--txt-name-size);letter-spacing:0.3px',
       onclick: deleteFromLightbox,
     }, ['Usuń']));
   }
@@ -2575,7 +2655,7 @@ function renderAddBody() {
   // 2. NAZWA
   body.appendChild(el('div', { style: 'margin-bottom:16px' }, [
     el('div', { class: 'caps-i', style: 'margin-bottom:6px' }, ['Nazwa']),
-    el('input', { type: 'text', placeholder: addState.tryb === 'stale' ? 'np. Netflix' : 'np. Tankowanie · Orlen', value: addState.nazwa || '', style: 'width:100%;border:none;border-bottom:1px solid #ddd;padding:6px 0;font-size:14px;outline:none', oninput: (e) => addState.nazwa = e.target.value }),
+    el('input', { type: 'text', placeholder: addState.tryb === 'stale' ? 'np. Netflix' : 'np. Tankowanie · Orlen', value: addState.nazwa || '', style: 'width:100%;border:none;border-bottom:1px solid #ddd;padding:6px 0;font-size:var(--txt-name-size);font-weight:var(--txt-name-weight);outline:none', oninput: (e) => addState.nazwa = e.target.value }),
   ]));
 
   // 3. KATEGORIA
@@ -2605,7 +2685,7 @@ function renderAddBody() {
   // 5. Toggle dzielony + anomalia — na samym dole. Stałe nie mogą być wspólne ani anomalią.
   if (addState.tryb !== 'stale') {
     body.appendChild(el('div', { style: 'padding:12px 0;border-top:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center;cursor:pointer', onclick: () => { addState.dzielony = !addState.dzielony; renderAddBody(); } }, [
-      el('div', { style: 'font-size:14px;font-weight:600' }, ['Wspólny wydatek ♥']),
+      el('div', { style: 'font-size:var(--txt-name-size);font-weight:600' }, ['Wspólny wydatek ♥']),
       el('span', { class: 'toggle ' + (addState.dzielony ? 'on' : '') }),
     ]));
     // Kwota partnera — input pod toggle, tylko jeśli dzielony=on
@@ -2615,13 +2695,13 @@ function renderAddBody() {
         el('input', {
           type: 'number', inputmode: 'decimal', placeholder: '0',
           value: addState.kwota_partnera || '',
-          style: 'width:100%;border:none;border-bottom:1px solid #ddd;padding:6px 0;font-family:Anton;font-size:20px;letter-spacing:-0.4px;outline:none;background:transparent',
+          style: 'width:100%;border:none;border-bottom:1px solid #ddd;padding:6px 0;font-family:Anton;font-size:var(--txt-amt-sm);letter-spacing:var(--txt-amt-sm-lsp);outline:none;background:transparent',
           oninput: (e) => addState.kwota_partnera = Number(e.target.value) || 0,
         }),
       ]));
     }
     body.appendChild(el('div', { style: 'padding:12px 0;border-top:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center;cursor:pointer', onclick: () => { addState.anomalia = !addState.anomalia; renderAddBody(); } }, [
-      el('div', { style: 'font-size:14px;font-weight:600' }, ['Warto zapamiętać ★']),
+      el('div', { style: 'font-size:var(--txt-name-size);font-weight:600' }, ['Warto zapamiętać ★']),
       el('span', { class: 'toggle ' + (addState.anomalia ? 'on' : '') }),
     ]));
   }
@@ -2715,6 +2795,132 @@ function syncSettingsUi() {
   if (typeof syncDataModeSeg === 'function') syncDataModeSeg();
   const tokenEl = document.getElementById('cloud-token-input');
   if (tokenEl) tokenEl.value = STATE.cloudToken || '';
+}
+
+// === CUSTOM KEYPAD (mobile only) ===========================================
+const Keypad = {
+  active: null,
+  isMobile: matchMedia('(pointer:coarse)').matches && innerWidth < 700,
+
+  open(input, mode) {
+    if (!this.isMobile) return;
+    if (this.active && this.active.input === input) return;
+    input.setAttribute('readonly', '');
+    input.setAttribute('inputmode', 'none');
+    this.active = { input, mode, val: String(input.value || ''), shift: false, alphaSub: null };
+    document.body.classList.add('kp-open');
+    document.documentElement.style.setProperty('--kp-h', (mode === 'alpha' ? 320 : 280) + 'px');
+    this.render();
+  },
+
+  close() {
+    if (!this.active) return;
+    document.body.classList.remove('kp-open');
+    this.active = null;
+    const root = document.getElementById('keypad-root');
+    if (root) root.innerHTML = '';
+  },
+
+  press(key) {
+    const a = this.active;
+    if (!a) return;
+    if (key === 'CONFIRM') { this.close(); return; }
+    if (key === 'BACKSPACE') {
+      a.val = a.val.slice(0, -1);
+    } else if (key === 'SHIFT') {
+      a.shift = !a.shift;
+    } else if (key === 'MODE_NUM') {
+      a.alphaSub = a.alphaSub === 'num' ? null : 'num';
+    } else if (key === 'SPACE') {
+      a.val += ' ';
+    } else {
+      const ch = a.shift ? key.toUpperCase() : key;
+      a.val += ch;
+      if (a.shift) a.shift = false;
+    }
+    a.input.value = a.val;
+    a.input.dispatchEvent(new Event('input', { bubbles: true }));
+    this.render();
+  },
+
+  render() {
+    const a = this.active;
+    if (!a) return;
+    const root = document.getElementById('keypad-root');
+    const echoVal = a.val || (a.mode === 'numeric' ? '0' : '');
+    const ghost = a.mode === 'numeric' ? '<span class="gh"> PLN</span>' : (a.val ? '' : '<span class="gh">tap żeby pisać…</span>');
+    const echoCls = a.mode === 'alpha' ? 'kp-echo alpha' : 'kp-echo';
+    const head = `
+      <div class="kp-head">
+        <div class="${echoCls}">${this._esc(echoVal)}${ghost}</div>
+        <button class="kp-confirm" data-k="CONFIRM"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>OK</button>
+      </div>`;
+    let body;
+    if (a.mode === 'numeric') {
+      body = `
+        <div class="kp-num">
+          ${[1,2,3,4,5,6,7,8,9].map(n => `<div class="k" data-k="${n}">${n}</div>`).join('')}
+          <div class="k aux" data-k=".">.</div>
+          <div class="k" data-k="0">0</div>
+          <div class="k del" data-k="BACKSPACE"><svg viewBox="0 0 24 24"><path d="M3 12l5-7h12v14H8z"/><line x1="14" y1="9" x2="18" y2="13"/><line x1="18" y1="9" x2="14" y2="13"/></svg></div>
+        </div>`;
+    } else {
+      // alpha QWERTY + Polish chars row
+      const numMode = a.alphaSub === 'num';
+      const rows = numMode
+        ? [['1','2','3','4','5','6','7','8','9','0'], ['-','/',':',';','(',')','zł','&','@','"'], ['#+=','.',',','?','!','\'','BACKSPACE']]
+        : [
+            ['ą','ć','ę','ł','ń','ó','ś','ź','ż'],
+            ['q','w','e','r','t','y','u','i','o','p'],
+            ['a','s','d','f','g','h','j','k','l'],
+            ['SHIFT','z','x','c','v','b','n','m','BACKSPACE'],
+          ];
+      const r0 = numMode ? '' : `<div class="kp-arow pl-row">${rows[0].map(c => `<div class="k" data-k="${c}">${c}</div>`).join('')}</div>`;
+      const buildKey = (c) => {
+        if (c === 'SHIFT') return `<div class="k shift wide${a.shift ? ' on' : ''}" data-k="SHIFT"><svg viewBox="0 0 24 24"><path d="M12 4 L4 13 H9 V20 H15 V13 H20 Z"/></svg></div>`;
+        if (c === 'BACKSPACE') return `<div class="k del wide" data-k="BACKSPACE"><svg viewBox="0 0 24 24"><path d="M3 12l5-7h12v14H8z"/><line x1="14" y1="9" x2="18" y2="13"/><line x1="18" y1="9" x2="14" y2="13"/></svg></div>`;
+        const disp = a.shift && !numMode ? c.toUpperCase() : c;
+        return `<div class="k" data-k="${c}">${this._esc(disp)}</div>`;
+      };
+      const rNums = numMode ? rows.map(r => `<div class="kp-arow">${r.map(buildKey).join('')}</div>`).join('') : rows.slice(1, 4).map(r => `<div class="kp-arow">${r.map(buildKey).join('')}</div>`).join('');
+      const bottom = `<div class="kp-arow">
+        <div class="k mode wide" data-k="MODE_NUM">${numMode ? 'ABC' : '123'}</div>
+        <div class="k space" data-k="SPACE">spacja</div>
+        <div class="k" data-k=",">,</div>
+        <div class="k" data-k=".">.</div>
+      </div>`;
+      body = `<div class="kp-alpha">${r0}${rNums}${bottom}</div>`;
+    }
+    root.innerHTML = head + body;
+    // Bind clicks (delegation w/in keypad)
+    root.onclick = (e) => {
+      const t = e.target.closest('[data-k]');
+      if (t) this.press(t.getAttribute('data-k'));
+    };
+  },
+
+  _esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;' }[c])); },
+};
+
+// Auto-wire: na mobile każdy input[type=number] (kwota) i input[type=text] (notatka) w modalach
+// otwiera keypad. Wyjątek: #cloud-token-input — admin pole, zostaje systemowe.
+function autoWireKeypad() {
+  if (!Keypad.isMobile) return;
+  document.addEventListener('click', (e) => {
+    const inp = e.target.closest('input[type="number"], input[type="text"]');
+    if (!inp) return;
+    if (inp.id === 'cloud-token-input') return;
+    const mode = inp.type === 'number' ? 'numeric' : 'alpha';
+    Keypad.open(inp, mode);
+  }, true);
+  // Zamknij keypad kliknięciem poza modalem i poza keypadem
+  document.addEventListener('click', (e) => {
+    if (!Keypad.active) return;
+    if (e.target.closest('#keypad-root')) return;
+    if (e.target.closest('input[type="number"], input[type="text"]')) return;
+    // Klik na inny element w modalu — nie zamykaj agresywnie, niech keypad zostanie
+    // Zamykamy tylko po explicit CONFIRM lub gdy modal się zamyka
+  }, true);
 }
 
 function boot() {
@@ -2866,7 +3072,7 @@ function boot() {
     const sections = [];
     const sync = d.syncedAt ? new Date(d.syncedAt) : null;
     const syncTxt = sync ? `${sync.toLocaleDateString('pl-PL')} ${String(sync.getHours()).padStart(2,'0')}:${String(sync.getMinutes()).padStart(2,'0')}` : 'nigdy';
-    sections.push(`<div style="font-size:11px;color:var(--muted-4);margin-bottom:12px">Od ostatniego sync (${syncTxt})</div>`);
+    sections.push(`<div style="font-size:var(--txt-meta-size);color:var(--muted-4);margin-bottom:12px">Od ostatniego sync (${syncTxt})</div>`);
 
     const w = d.wpisy;
     if (w.added.length) {
@@ -2927,6 +3133,7 @@ function boot() {
     setTimeout(() => statusEl.textContent = '⟳', 3000);
   });
   loadData();
+  autoWireKeypad();
 }
 
 boot();
