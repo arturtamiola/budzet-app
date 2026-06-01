@@ -801,13 +801,13 @@ body.big-text #app .anton.num { font-size: 110px !important; letter-spacing: -3.
   box-shadow: 0 -2px 12px rgba(0,0,0,0.08);
   /* Safe area: paski telefonu + buffer 30px (5-10% wysokości) */
   padding-bottom: max(env(safe-area-inset-bottom), 30px);
-  /* Slide-in: stoi schowany pod dolną krawędzią, ujawnia się przez transform */
-  transform: translateY(100%);
-  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  /* Slide-in: zaczynamy z translateY(100%), transition animuje do 0 */
+  transform: translateY(110%);
+  transition: transform 0.32s cubic-bezier(0.16, 1, 0.3, 1);
   pointer-events: none;
-  visibility: hidden;
+  will-change: transform;
 }
-body.kp-open #keypad-root { transform: translateY(0); pointer-events: auto; visibility: visible; }
+body.kp-open #keypad-root { transform: translateY(0); pointer-events: auto; }
 body.kp-open #add-sheet { padding-bottom: var(--kp-h, 260px); }
 .kp-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 14px; border-bottom: 1px solid var(--surface-3); background: var(--bg); }
 .kp-echo { font-family: 'Anton'; font-size: 20px; letter-spacing: -0.5px; color: var(--fg); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -817,13 +817,13 @@ body.kp-open #add-sheet { padding-bottom: var(--kp-h, 260px); }
 .kp-confirm svg { width: 14px; height: 14px; stroke: var(--fg); fill: none; stroke-width: 2.5; }
 .kp-num { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--surface-3); flex: 1; }
 .kp-num .k { background: var(--bg); display: flex; align-items: center; justify-content: center; font-family: 'Anton'; font-size: 26px; letter-spacing: -0.4px; color: var(--fg); cursor: pointer; user-select: none; transition: background 0.05s, transform 0.08s ease-out; min-height: 48px; }
-.kp-num .k:active { background: var(--accent); color: var(--fg); transform: scale(1.06); }
+.kp-num .k:active, .kp-num .k.pressed { background: var(--accent); color: var(--fg); transform: scale(1.08); z-index: 2; }
 .kp-num .k.aux { color: var(--muted); font-size: 20px; }
 .kp-num .k.del svg { width: 22px; height: 22px; fill: none; stroke: var(--fg); stroke-width: 2; }
 .kp-alpha { display: flex; flex-direction: column; gap: 4px; padding: 6px 4px; flex: 1; background: var(--surface); }
 .kp-arow { display: flex; gap: 3px; justify-content: center; flex: 1; }
 .kp-arow .k { flex: 1; background: var(--bg); display: flex; align-items: center; justify-content: center; font-family: 'Inter'; font-size: 16px; font-weight: 600; color: var(--fg); cursor: pointer; user-select: none; border: 1px solid var(--surface-3); min-height: 36px; transition: background 0.05s, transform 0.08s ease-out; }
-.kp-arow .k:active { background: var(--accent); transform: scale(1.08); }
+.kp-arow .k:active, .kp-arow .k.pressed { background: var(--accent); color: var(--fg); transform: scale(1.12); z-index: 2; }
 .kp-arow .k.wide { flex: 1.4; }
 .kp-arow .k.space { flex: 5; }
 .kp-arow .k.mode, .kp-arow .k.shift, .kp-arow .k.del { background: var(--surface); color: var(--muted); }

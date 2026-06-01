@@ -2607,7 +2607,10 @@ function openAddModal(tryb = 'transakcja', locked = false) {
   };
   renderAddBody();
   showSheet('add-sheet');
-  setTimeout(() => $('#add-amount-input')?.focus(), 200);
+  // Auto-focus tylko na desktopie — na mobile to triggeruje systemową klawiaturę
+  if (typeof Keypad === 'undefined' || !Keypad.isMobile) {
+    setTimeout(() => $('#add-amount-input')?.focus(), 200);
+  }
 }
 
 function renderAddBody() {
@@ -2805,7 +2808,8 @@ const Keypad = {
     document.body.classList.remove('kp-open');
     this.active = null;
     const root = document.getElementById('keypad-root');
-    if (root) root.innerHTML = '';
+    // Czyść innerHTML PO transition (320ms) żeby slide-out był widoczny
+    setTimeout(() => { if (!document.body.classList.contains('kp-open') && root) root.innerHTML = ''; }, 340);
   },
 
   press(key) {
@@ -2879,7 +2883,13 @@ const Keypad = {
       body = `<div class="kp-alpha">${r0}${rNums}${bottom}</div>`;
     }
     root.innerHTML = head + body;
-    // Bind clicks (delegation w/in keypad)
+    // Tap feedback via JS — iOS :active jest nieprzewidywalny, używamy klasy .pressed
+    root.onpointerdown = (e) => {
+      const t = e.target.closest('[data-k]');
+      if (!t) return;
+      t.classList.add('pressed');
+      setTimeout(() => t.classList.remove('pressed'), 140);
+    };
     root.onclick = (e) => {
       const t = e.target.closest('[data-k]');
       if (t) this.press(t.getAttribute('data-k'));
