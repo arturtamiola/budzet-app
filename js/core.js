@@ -165,7 +165,28 @@ function dialog({ title, message = '', buttons }) {
 }
 
 // ============== EXPORT XLSX ==============
-function buildMonthSheet(rok, mi) {
+// Layout 1:1 z oryginalnym Excelem ([pakiet-budzet] szablon):
+// — Sheet "Podsumowanie": KPI saldo + summary Wydatki/Przychody + tabela kategorii (cols A-L, 44 wierszy)
+// — Sheet "Transakcje": lewo wydatki (B-E), prawo przychody (G-J), bufor 30 wierszy
+
+const ZL_FMT = '#,##0" zł";-#,##0" zł";"0 zł"';
+const SIGNED_ZL_FMT = '"+"#,##0" zł";-#,##0" zł";"0 zł"';
+
+// Lista typowych kategorii przychodów per profil. Plus union z aktualnych danych żeby nie zgubić niczego.
+function getIncomeCats() {
+  const base = STATE.activeProfile === 'marta'
+    ? ['Pensja', '800+', 'Inne']
+    : ['Pensja', 'Oszczędności', '800+', 'Odsetki', 'Inne', 'Kategoria niestandardowa'];
+  const fromData = [...new Set(getAllWpisy()
+    .filter(w => w.kierunek === 'przychod')
+    .map(w => w.kategoria))];
+  // Union: base order zachowane, plus brakujące z fromData na końcu
+  const all = [...base];
+  fromData.forEach(k => { if (!all.includes(k)) all.push(k); });
+  return all;
+}
+
+function buildMonthWorkbook(rok, mi) {
   const all = getAllWpisy();
   const monthWpisy = all.filter(w => w.rok === rok && w.miesiac === mi);
 
@@ -183,92 +204,174 @@ function buildMonthSheet(rok, mi) {
     .filter(w => w._kw != null);
   const przychody = monthWpisy.filter(w => w.kierunek === 'przychod' && w.kwota > 0);
 
-  // === LAYOUT (1-indexed rows w arkuszu) ===
-  // 1   HERO label "Zarobione"        | =SUM(G:G trans)
-  // 2   HERO label "Planowane wydatki" | suma planów (statyczne)
-  // 3   HERO label "Wydane"           | =SUM(B:B trans)
-  // 4   HERO label "Wolny budżet"     | =B1-B3
-  // 5   (blank)
-  // 6   "Kategoria" | "Plan" | "Wydane" | "% planu" | "Różnica"
-  // 7-K per CATS (Wydane = SUMIF formuła)
-  // S   "SUMA"     | =SUM Plan | =SUM Wydane | =formuła % | =formuła Różnica
-  // S+1 (blank)
-  // S+2 "Transakcje" (label)
-  // S+3 "Wydatki" | | | | | "Przychody" | |
-  // S+4 "Data" | "Kwota" | "Opis" | "Kategoria" | | "Data" | "Kwota" | "Opis"
-  // S+5...  dane (bufor: max(wydatki, przychody, 30) wierszy żeby user mógł dopisać)
+  const wydCats = CATS;
+  const incCats = getIncomeCats();
 
-  const TRANS_LABEL_ROW = 6 + CATS.length + 1 + 2;  // S+2
-  const TRANS_HEADER_ROW = TRANS_LABEL_ROW + 2;     // S+4
-  const TRANS_START = TRANS_HEADER_ROW + 1;         // S+5
-  const dataRows = Math.max(wydatki.length, przychody.length, 30); // bufor 30 dla dopisywania
-  const TRANS_END = TRANS_START + dataRows - 1;
-  const SUMA_ROW = 6 + CATS.length + 1;             // 6 + CATS + 1 = S
-  const KAT_FIRST = 7;
-  const KAT_LAST = 6 + CATS.length;
+  // === SHEET 1: Transakcje (potrzebne do formuł SUMIF z Podsumowania) ===
+  // Layout:
+  //  1: (puste / instrukcja)
+  //  2: B="Wydatki" | G="Przychody"
+  //  3: (puste)
+  //  4: B="Data" C="Kwota" D="Opis" E="Kategoria" | G="Data" H="Kwota" I="Opis" J="Kategoria"
+  //  5+: dane (bufor 30 wierszy)
+  const TX_HEADER_ROW = 4;
+  const TX_START = TX_HEADER_ROW + 1;
+  const dataRows = Math.max(wydatki.length, przychody.length, 30);
+  const TX_END = TX_START + dataRows - 1;
 
-  const sumifWyd = kat => `SUMIF(D${TRANS_START}:D${TRANS_END},"${kat}",B${TRANS_START}:B${TRANS_END})`;
-
-  // Buduj aoa (placeholders, formuły patchne potem)
-  const aoa = [];
-  // Wiersze 1-4: HERO
-  aoa.push(['Zarobione', null, '', '', '', '', '', '']);
-  aoa.push(['Planowane wydatki', null, '', '', '', '', '', '']);
-  aoa.push(['Wydane', null, '', '', '', '', '', '']);
-  aoa.push(['Wolny budżet', null, '', '', '', '', '', '']);
-  aoa.push(['', '', '', '', '', '', '', '']);
-  // Wiersz 6: nagłówek kategorii
-  aoa.push(['Kategoria', 'Plan', 'Wydane', '% planu', 'Różnica', '', '', '']);
-  // Wiersze 7..KAT_LAST: per CAT
-  let sumaPlan = 0;
-  CATS.forEach(kat => {
-    const plan = getPlan(kat, rok, mi);
-    sumaPlan += plan;
-    aoa.push([kat, plan || 0, null, null, null, '', '', '']);
-  });
-  // Wiersz SUMA
-  aoa.push(['SUMA', null, null, null, null, '', '', '']);
-  // Blank
-  aoa.push(['', '', '', '', '', '', '', '']);
-  // TRANSAKCJE label + Wydatki/Przychody header
-  aoa.push(['Transakcje', '', '', '', '', '', '', '']);
-  aoa.push(['Wydatki', '', '', '', '', 'Przychody', '', '']);
-  aoa.push(['Data', 'Kwota', 'Opis', 'Kategoria', '', 'Data', 'Kwota', 'Opis']);
+  const txAoa = [];
+  txAoa.push(['']);                                                                         // 1
+  txAoa.push(['', 'Wydatki', '', '', '', '', 'Przychody']);                                 // 2
+  txAoa.push(['']);                                                                          // 3
+  txAoa.push(['', 'Data', 'Kwota', 'Opis', 'Kategoria', '', 'Data', 'Kwota', 'Opis', 'Kategoria']); // 4
   for (let i = 0; i < dataRows; i++) {
     const w = wydatki[i];
     const p = przychody[i];
-    aoa.push([
+    txAoa.push([
+      '',
       w?.data || '', w?._kw ?? '', w?.nazwa || '', w?.kategoria || '',
       '',
-      p?.data || '', p?.kwota ?? '', p?.nazwa || '',
+      p?.data || '', p?.kwota ?? '', p?.nazwa || '', p?.kategoria || '',
     ]);
   }
-
-  const ws = XLSX.utils.aoa_to_sheet(aoa);
-
-  // === FORMUŁY ===
-  // HERO
-  ws[`B1`] = { t: 'n', f: `SUM(G${TRANS_START}:G${TRANS_END})` };
-  ws[`B2`] = { t: 'n', v: sumaPlan };
-  ws[`B3`] = { t: 'n', f: `SUM(B${TRANS_START}:B${TRANS_END})` };
-  ws[`B4`] = { t: 'n', f: `B1-B3` };
-  // Per CAT
-  CATS.forEach((kat, i) => {
-    const r = KAT_FIRST + i;
-    ws[`C${r}`] = { t: 'n', f: sumifWyd(kat) };
-    ws[`D${r}`] = { t: 'n', f: `IFERROR(C${r}/B${r},"")`, z: '0%' };
-    ws[`E${r}`] = { t: 'n', f: `B${r}-C${r}` };
+  const txWs = XLSX.utils.aoa_to_sheet(txAoa);
+  // Formaty kwot w kolumnach C (wydatki) i H (przychody)
+  for (let r = TX_START; r <= TX_END; r++) {
+    const cW = txWs['C' + r]; if (cW && typeof cW.v === 'number') cW.z = ZL_FMT;
+    const cP = txWs['H' + r]; if (cP && typeof cP.v === 'number') cP.z = ZL_FMT;
+  }
+  txWs['!cols'] = [
+    { wch: 2 },   // A spacer
+    { wch: 12 },  // B Data wyd
+    { wch: 12 },  // C Kwota wyd
+    { wch: 26 },  // D Opis wyd
+    { wch: 22 },  // E Kategoria wyd
+    { wch: 2 },   // F spacer
+    { wch: 12 },  // G Data prz
+    { wch: 12 },  // H Kwota prz
+    { wch: 26 },  // I Opis prz
+    { wch: 22 },  // J Kategoria prz
+  ];
+  txWs['!ref'] = `A1:J${TX_END}`;
+  // Bold dla wierszy 2 (sekcja) i 4 (kolumny)
+  ['B2', 'G2', 'B4', 'C4', 'D4', 'E4', 'G4', 'H4', 'I4', 'J4'].forEach(addr => {
+    if (txWs[addr]) txWs[addr].s = { font: { bold: true } };
   });
-  // SUMA
-  ws[`B${SUMA_ROW}`] = { t: 'n', f: `SUM(B${KAT_FIRST}:B${KAT_LAST})` };
-  ws[`C${SUMA_ROW}`] = { t: 'n', f: `SUM(C${KAT_FIRST}:C${KAT_LAST})` };
-  ws[`D${SUMA_ROW}`] = { t: 'n', f: `IFERROR(C${SUMA_ROW}/B${SUMA_ROW},"")`, z: '0%' };
-  ws[`E${SUMA_ROW}`] = { t: 'n', f: `B${SUMA_ROW}-C${SUMA_ROW}` };
 
-  ws['!cols'] = [{ wch: 22 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 24 }];
-  // Update !ref żeby pokrywało dodane formuły (czasem aoa_to_sheet ustawia ciaśniej)
-  ws['!ref'] = `A1:H${TRANS_END}`;
-  return ws;
+  // === SHEET 2: Podsumowanie ===
+  // Layout 1:1 z oryginałem:
+  //  8: A="Budżet miesięczny" + I="Saldo początkowe:" + L=(0 lub input)
+  // 14-15: I="Zmniejszenie oszczędności" / I=różnica
+  // 16-17: C="SALDO POCZĄTKOWE" D="SALDO KOŃCOWE" + I="Zaoszczędzone..."
+  //        C17=D17 (= saldo start), D17=E17 (= saldo end)
+  // 20-22: A="Wydatki" B=Planowane/Rzeczywiste C=kwota | G="Przychody" H=Planowane/Rzeczywiste I=kwota
+  // 24-25: A="Wydatki" | G="Przychody" + sub-header Planowane/Rzeczywiste/Różnica
+  // 26:    A="Suma" + C=SUM(C27:C44) D=SUM(D27:D44) E=SUM(E27:E44) | G="Suma" + I/J/K analogicznie
+  // 27+:   B=kategoria, C=plan, D=SUMIF rzeczywiste, E=różnica  |  H=kategoria, I=plan, J=SUMIF, K=różnica
+  const CAT_START = 28; // wiersz 28 w arkuszu = pierwsza kategoria (zachowuje pusty wiersz 27 jak w oryginale Artura)
+  const maxCats = Math.max(wydCats.length, incCats.length);
+  const CAT_BUFFER = 4; // puste wiersze po ostatniej kategorii — user może dopisać własne, SUMIF zadziała od razu
+  const CAT_END = CAT_START + maxCats + CAT_BUFFER - 1;
+
+  const psAoa = [];
+  for (let i = 0; i < CAT_END; i++) psAoa.push(Array(12).fill(''));
+  const set = (r1, c1, v) => { psAoa[r1 - 1][c1 - 1] = v; };
+
+  // Instrukcje (skrócone — User i tak je zna)
+  set(2, 1, 'PIERWSZE KROKI');                set(2, 9, 'UWAGA');
+  set(3, 1, 'Podaj saldo początkowe (kom. L8)'); set(3, 9, 'Edytuj tylko wyróżnione komórki');
+  set(5, 1, 'Gdy wpiszesz datę w arkuszu Transakcje, kwota wpadnie do Podsumowania');
+  // Tytuł + saldo początkowe (input user)
+  set(8, 1, `Budżet miesięczny ${ML_FULL[mi - 1]} ${rok}`);
+  set(8, 9, 'Saldo początkowe:');
+  // L8 zostaje puste — user wpisuje
+  // Wiersz 14-17: saldo
+  // I14 = "Zwiększenie/Zmniejszenie oszczędności" (formuła)
+  // I15 = różnica (formuła)
+  // C16 = "SALDO POCZĄTKOWE", D16 = "SALDO KOŃCOWE"
+  set(16, 3, 'SALDO POCZĄTKOWE'); set(16, 4, 'SALDO KOŃCOWE');
+  // Wiersz 20-22: KPI Wydatki / Przychody
+  set(20, 1, 'Wydatki'); set(20, 7, 'Przychody');
+  set(21, 1, 'Planowane'); set(21, 7, 'Planowane');
+  set(22, 1, 'Rzeczywiste'); set(22, 7, 'Rzeczywiste');
+  // Wiersz 24-25: tabele header
+  set(24, 1, 'Wydatki'); set(24, 7, 'Przychody');
+  set(25, 3, 'Planowane'); set(25, 4, 'Rzeczywiste'); set(25, 5, 'Różnica');
+  set(25, 9, 'Planowane'); set(25, 10, 'Rzeczywiste'); set(25, 11, 'Różnica');
+  // Wiersz 26: Suma
+  set(26, 1, 'Suma'); set(26, 7, 'Suma');
+  // Kategorie wydatków (kol B) i przychodów (kol H), plany w D/J
+  wydCats.forEach((kat, i) => {
+    const r = CAT_START + i;
+    set(r, 2, kat);
+    set(r, 4, getPlan(kat, rok, mi) || 0);
+  });
+  incCats.forEach((kat, i) => {
+    const r = CAT_START + i;
+    set(r, 8, kat);
+    set(r, 10, 0); // Plan przychodów = 0 (apka nie ma planów przychodów)
+  });
+
+  const psWs = XLSX.utils.aoa_to_sheet(psAoa);
+
+  // === FORMUŁY w Podsumowanie ===
+  // D17 = saldo początkowe (user wpisuje w L8, fallback 0)
+  // E17 = D17 + (Przychody rzeczywiste - Wydatki rzeczywiste)
+  psWs['D17'] = { t: 'n', f: 'IF(ISBLANK(L8),0,L8)', z: ZL_FMT };
+  psWs['E17'] = { t: 'n', f: 'D17+(I22-C22)', z: ZL_FMT };
+  // I14: label dynamiczny + I15: różnica + I16: label "Zaoszczędzone/Wydane"
+  psWs['I14'] = { t: 's', f: 'IF(E17-D17>=0,"Zwiększenie oszczędności","Zmniejszenie oszczędności")' };
+  psWs['I15'] = { t: 'n', f: 'IFERROR(E17-D17,0)', z: SIGNED_ZL_FMT };
+  psWs['I16'] = { t: 's', f: 'IF(E17-D17>=0,"Zaoszczędzone w tym miesiącu","Wydane w tym miesiącu")' };
+  // KPI W20-W22
+  psWs['C21'] = { t: 'n', f: 'D26', z: ZL_FMT }; // Wyd planowane suma
+  psWs['C22'] = { t: 'n', f: 'E26', z: ZL_FMT }; // Wyd rzeczywiste suma
+  psWs['I21'] = { t: 'n', f: 'J26', z: ZL_FMT }; // Prz planowane suma
+  psWs['I22'] = { t: 'n', f: 'K26', z: ZL_FMT }; // Prz rzeczywiste suma
+  // Suma wiersz 26
+  psWs['D26'] = { t: 'n', f: `SUM(D${CAT_START}:D${CAT_END})`, z: ZL_FMT };
+  psWs['E26'] = { t: 'n', f: `SUM(E${CAT_START}:E${CAT_END})`, z: ZL_FMT };
+  psWs['F26'] = { t: 'n', f: `SUM(F${CAT_START}:F${CAT_END})`, z: SIGNED_ZL_FMT };
+  psWs['J26'] = { t: 'n', f: `SUM(J${CAT_START}:J${CAT_END})`, z: ZL_FMT };
+  psWs['K26'] = { t: 'n', f: `SUM(K${CAT_START}:K${CAT_END})`, z: ZL_FMT };
+  psWs['L26'] = { t: 'n', f: `SUM(L${CAT_START}:L${CAT_END})`, z: SIGNED_ZL_FMT };
+  // Per kategoria — SUMIF do Transakcje. Formuły wpisane w cały zakres CAT_START..CAT_END
+  // (user może dopisać kategorię w pustym wierszu w bufferze i wszystko zaskoczy samo).
+  for (let r = CAT_START; r <= CAT_END; r++) {
+    psWs['E' + r] = { t: 'n', f: `IF(ISBLANK(B${r}),"",SUMIF(Transakcje!$E:$E,$B${r},Transakcje!$C:$C))`, z: ZL_FMT };
+    psWs['F' + r] = { t: 'n', f: `IF(ISBLANK(B${r}),"",D${r}-E${r})`, z: SIGNED_ZL_FMT };
+    psWs['K' + r] = { t: 'n', f: `IF(ISBLANK(H${r}),"",SUMIF(Transakcje!$J:$J,$H${r},Transakcje!$H:$H))`, z: ZL_FMT };
+    psWs['L' + r] = { t: 'n', f: `IF(ISBLANK(H${r}),"",K${r}-J${r})`, z: SIGNED_ZL_FMT };
+    const d = psWs['D' + r]; if (d) d.z = ZL_FMT;
+    const j = psWs['J' + r]; if (j) j.z = ZL_FMT;
+  }
+  // Bold dla nagłówków/sum
+  ['A8', 'I8', 'C16', 'D16', 'A20', 'G20', 'A24', 'G24', 'A26', 'G26',
+    'C25', 'D25', 'E25', 'I25', 'J25', 'K25', 'I14', 'I16'].forEach(a => {
+    if (psWs[a]) psWs[a].s = { font: { bold: true } };
+  });
+
+  psWs['!cols'] = [
+    { wch: 22 }, // A
+    { wch: 22 }, // B kategoria wyd
+    { wch: 12 }, // C
+    { wch: 14 }, // D Planowane wyd
+    { wch: 14 }, // E Rzeczywiste wyd
+    { wch: 14 }, // F Różnica wyd
+    { wch: 2 },  // G spacer
+    { wch: 22 }, // H kategoria prz
+    { wch: 12 }, // I
+    { wch: 14 }, // J Planowane prz
+    { wch: 14 }, // K Rzeczywiste prz
+    { wch: 14 }, // L Różnica prz
+  ];
+  psWs['!ref'] = `A1:L${Math.max(CAT_END, 44)}`;
+
+  // Workbook
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, psWs, 'Podsumowanie');
+  XLSX.utils.book_append_sheet(wb, txWs, 'Transakcje');
+  return wb;
 }
 
 async function exportMonthXlsx() {
@@ -318,11 +421,11 @@ async function exportMonthXlsx() {
   });
   if (!result || !result.length) return;
 
-  // Generuj osobny xlsx per mc (każdy w formacie zgodnym z szablonem GS)
+  // Generuj osobny xlsx per mc — 2 sheety (Podsumowanie + Transakcje) zgodnie z oryginalnym szablonem
+  const profileName = STATE.activeProfile === 'marta' ? 'Marta' : 'Artur';
   for (const { rok, mi } of result) {
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, buildMonthSheet(rok, mi), 'Transakcje');
-    const fname = `${String(mi).padStart(2, '0')}-${rok} - Artur - Budżet miesięczny.xlsx`;
+    const wb = buildMonthWorkbook(rok, mi);
+    const fname = `${String(mi).padStart(2, '0')}-${rok} - ${profileName} - Budżet miesięczny.xlsx`;
     XLSX.writeFile(wb, fname);
     // Krótki delay między downloadami żeby przeglądarka nie zablokowała
     if (result.length > 1) await new Promise(r => setTimeout(r, 300));
