@@ -209,8 +209,8 @@ body.ctrls-closed .ctrl-host { display: none; }
 .nav-item .lbl { font-size: var(--txt-meta-size); letter-spacing: var(--txt-meta-lsp); text-transform: uppercase; font-weight: var(--txt-meta-weight); color: var(--muted-4); line-height: 1; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 /* Mobile default: pokaż skrócone etykiety, ukryj pełne. Override w desktop @media. */
 .nav-item .lbl-full { display: none; }
-/* Brand + Dodaj — tylko desktop sidebar; mobile bottom nav ich nie pokazuje. */
-.bnav-brand, .nav-add { display: none; }
+/* Brand — tylko desktop sidebar; mobile bottom nav go nie pokazuje. */
+.bnav-brand { display: none; }
 
 /* iPhone 12 mini i mniejsze (<= 380px) — kompresja padding/gap żeby nic nie wystawało */
 @media (max-width: 380px) {
@@ -220,6 +220,8 @@ body.ctrls-closed .ctrl-host { display: none; }
   .bnav { padding-left: 4px; padding-right: 4px; }
   .nav-item { width: auto; flex: 1; min-width: 0; padding: 0 2px; }
   .nav-item .lbl { letter-spacing: 0.5px; }
+  /* "Transakcje" Anton 76px wystaje poza 375px viewport — zmniejszamy big-h o ~20% */
+  .big-h { font-size: 60px; letter-spacing: -2px; }
 }
 .nav-item.active .circle { background: var(--accent); box-shadow: 0 3px 8px var(--accent-glow); }
 .nav-item.active .circle svg { stroke: var(--accent-fg); }
@@ -1034,8 +1036,6 @@ body.fonts-loading #app { visibility: hidden; }
   .bnav-brand { display: block !important; padding: 0 12px 20px; }
   .bnav-brand-name { font-family: 'Anton'; font-size: 28px; letter-spacing: -1px; color: var(--fg); line-height: 1; }
   .bnav-brand-sub { font-size: 10px; letter-spacing: 2.2px; text-transform: uppercase; font-weight: 700; color: var(--muted); margin-top: 4px; }
-  /* Dodaj button — widoczny tylko w sidebarze (mobile ma własny inline) */
-  .nav-add { display: flex !important; margin-bottom: 6px; }
   /* Settings link na dole sidebar — widoczny + przyciśnięty na sam dół */
   .nav-settings { display: flex !important; margin-top: auto !important; }
 
