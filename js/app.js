@@ -247,6 +247,13 @@ function syncSettingsUi() {
   setT('t-big-text', 'bigText');
   if (typeof syncThemeSeg === 'function') syncThemeSeg();
   if (typeof syncDataModeSeg === 'function') syncDataModeSeg();
+  // Profile switcher segments
+  document.querySelectorAll('#profile-seg .seg').forEach(s =>
+    s.classList.toggle('active', s.getAttribute('data-profile') === STATE.activeProfile)
+  );
+  // Brand sub w sidebar (desktop) — nazwa profilu
+  const bsub = document.getElementById('bnav-brand-sub');
+  if (bsub) bsub.textContent = STATE.activeProfile === 'marta' ? 'Marta' : 'Artur';
   const tokenEl = document.getElementById('cloud-token-input');
   if (tokenEl) tokenEl.value = STATE.cloudToken || '';
 }
@@ -262,6 +269,7 @@ function boot() {
   });
   $('#gear-btn').addEventListener('click', () => { showSheet('settings-sheet'); syncSettingsUi(); });
   $('#sidebar-gear')?.addEventListener('click', () => { showSheet('settings-sheet'); syncSettingsUi(); });
+  $('#sidebar-add')?.addEventListener('click', () => openAddModal('transakcja'));
   // Filtry toggle — pokazuje/ukrywa .ctrl-host w bieżącym widoku
   try {
     const saved = localStorage.getItem('uiCtrlsOpen');
@@ -338,8 +346,12 @@ function boot() {
     s.addEventListener('click', async () => {
       const dm = s.getAttribute('data-dm');
       if (dm === STATE.dataMode) return;
+      if (dm === 'cloud' && !getCloudUrl()) {
+        toast('Cloud dla profilu ' + STATE.activeProfile + ' nie skonfigurowany', 'err');
+        return;
+      }
       STATE.dataMode = dm;
-      localStorage.setItem('dataMode', dm);
+      localStorage.setItem(pk('dataMode'), dm);
       syncDataModeSeg();
       toast(dm === 'cloud' ? 'Ładuję z chmury…' : 'Wracam do lokalnego…');
       await loadData();
@@ -347,13 +359,24 @@ function boot() {
   });
   syncDataModeSeg();
 
+  // Profile switcher segmented control (Artur/Marta)
+  $$('#profile-seg .seg').forEach(s => {
+    s.addEventListener('click', async () => {
+      const p = s.getAttribute('data-profile');
+      if (p === STATE.activeProfile) return;
+      toast('Przełączam na ' + (p === 'marta' ? 'Martę' : 'Artura') + '…');
+      await switchProfile(p);
+      syncSettingsUi();
+    });
+  });
+
   // Cloud token input
   const tokenEl = $('#cloud-token-input');
   if (tokenEl) {
     tokenEl.value = STATE.cloudToken || '';
     tokenEl.addEventListener('change', () => {
       STATE.cloudToken = tokenEl.value.trim();
-      localStorage.setItem('cloudToken', STATE.cloudToken);
+      localStorage.setItem(pk('cloudToken'), STATE.cloudToken);
       toast(STATE.cloudToken ? 'Token zapisany' : 'Token wyczyszczony');
     });
   }
@@ -386,11 +409,11 @@ function boot() {
 
   $('#cloud-logout').addEventListener('click', () => {
     STATE.cloudToken = '';
-    localStorage.removeItem('cloudToken');
+    localStorage.removeItem(pk('cloudToken'));
     const tokenEl = $('#cloud-token-input');
     if (tokenEl) tokenEl.value = '';
     STATE.dataMode = 'local';
-    localStorage.setItem('dataMode', 'local');
+    localStorage.setItem(pk('dataMode'), 'local');
     syncDataModeSeg();
     toast('Wylogowano — tryb lokalny');
   });

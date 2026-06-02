@@ -1,11 +1,22 @@
 // ============== CONFIG ==============
 const ML = ['Sty','Lut','Mar','Kwi','Maj','Cze','Lip','Sie','Wrz','Paź','Lis','Gru'];
 const ML_FULL = ['Styczeń','Luty','Marzec','Kwiecień','Maj','Czerwiec','Lipiec','Sierpień','Wrzesień','Październik','Listopad','Grudzień'];
-const CATS = ['Firma','Nela','Dom','Transport','Restauracje','Sport','Zakupy','Podroze','Ubrania','Fryzjer','Marta Zdrowie','Artur Zdrowie','Inne','Koty'];
+// Kategorie wydatków per profile — Artur i Marta mają osobne listy.
+// Helper getCats() zwraca aktywną listę zależnie od STATE.activeProfile.
+// CATS (legacy) zostaje jako alias dla aktualnej profile listy — backward-compat z views/modals.
+const CATS_ARTUR = ['Zakupy','Restauracje','Transport','Nela','Koty','Sport','Firma','Dom','Marta Zdrowie','Artur Zdrowie','Ubrania / Kosmetyki','Fryzjer / Paznokcie','Podróże','Inne'];
+const CATS_MARTA = ['Zakupy','Restauracje','Transport','Nela','Koty','Sport','Firma','Media','Marta Zdrowie','Artur Zdrowie','Moje różne','Fryzjer / Paznokcie','Podróże','Inne'];
+function getCats() {
+  const p = (typeof STATE !== 'undefined') ? STATE.activeProfile : 'artur';
+  return p === 'marta' ? CATS_MARTA : CATS_ARTUR;
+}
+let CATS = CATS_ARTUR;  // mutowane przy profile switch w switchProfile()
 
 // Apka NIE wykrywa anomalii ani niczego automatycznie — czyta tag `anomalia: true` z danych.
 // Konwersja/wykrywanie jest w convert-data.js (lub Apps Script przy migracji online).
 
+// Ikony shared między profilami. Media (Marta) używa tej samej ikony co Dom (Artur) — alias.
+// Fryzjer / Paznokcie używa ikony Fryzjer (alias). Moje różne ma własną nową ikonę.
 const CAT_ICONS = {
   Firma: '<path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/>',
   Nela: '<circle cx="12" cy="7" r="3"/><path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/>',
@@ -14,6 +25,7 @@ const CAT_ICONS = {
   Restauracje: '<path d="M6 2v8M10 2v8M8 10v12M14 2v20"/>',
   Sport: '<circle cx="12" cy="12" r="5"/><path d="M3 12h2M19 12h2M12 3v2M12 19v2"/>',
   Zakupy: '<path d="M3 6h18l-2 14H5L3 6zM8 6V4a4 4 0 0 1 8 0v2"/>',
+  // Legacy klucz "Podroze" zostaje dla starych danych; nowy "Podróże" alias na ten sam SVG niżej
   Podroze: '<path d="M22 16l-10 4-10-4 10-4 10 4z"/><path d="M2 8l10 4 10-4-10-4-10 4z"/>',
   Ubrania: '<path d="M4 6l4-4h8l4 4v3l-4 1v11H8V10L4 9V6z"/>',
   Fryzjer: '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4L8.5 15.5"/>',
@@ -22,6 +34,12 @@ const CAT_ICONS = {
   Inne: '<rect x="3" y="7" width="18" height="14" rx="2"/><path d="M3 11h18M8 7V3M16 7V3"/>',
   Koty: '<circle cx="12" cy="14" r="6"/><circle cx="7" cy="6" r="2"/><circle cx="17" cy="6" r="2"/>',
   Pensja: '<path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
+  // Nowe ikony dla nowych nazw kategorii:
+  'Podróże': '<path d="M22 16l-10 4-10-4 10-4 10 4z"/><path d="M2 8l10 4 10-4-10-4-10 4z"/>',
+  'Ubrania / Kosmetyki': '<path d="M4 6l4-4h8l4 4v3l-4 1v11H8V10L4 9V6z"/>',
+  'Fryzjer / Paznokcie': '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4L8.5 15.5"/>',
+  Media: '<path d="M3 12l9-9 9 9M5 10v10h14V10"/>',  // ta sama co Dom — Artur widzi Dom, Marta widzi Media
+  'Moje różne': '<path d="M4 6l4-4h8l4 4v3l-4 1v11H8V10L4 9V6z"/>',  // ta sama co Ubrania / Kosmetyki — w praktyce Marty "moje różne" to ten sam zakres
 };
 const catIcon = k => CAT_ICONS[k] || CAT_ICONS.Inne;
 
@@ -31,6 +49,12 @@ const CAT_COLOR = {
   Restauracje: '#f97316', Sport: '#22c55e', Zakupy: '#a855f7', Podroze: '#14b8a6',
   Ubrania: '#f43f5e', Fryzjer: '#d946ef', 'Marta Zdrowie': '#ef4444',
   'Artur Zdrowie': '#dc2626', Inne: '#94a3b8', Koty: '#eab308',
+  // Aliasy dla nowych nazw — Media dziedziczy kolor Dom, etc:
+  'Podróże': '#14b8a6',
+  'Ubrania / Kosmetyki': '#f43f5e',
+  'Fryzjer / Paznokcie': '#d946ef',
+  Media: '#8b5cf6',
+  'Moje różne': '#f43f5e',  // ten sam co Ubrania / Kosmetyki
 };
 const catColor = k => CAT_COLOR[k] || '#94a3b8';
 
@@ -43,6 +67,7 @@ function viewportSuffix() {
 
 // ============== STATE ==============
 const STATE = {
+  activeProfile: 'artur',  // 'artur' | 'marta' — który profil danych jest aktywny (CATS, cloud URL, token)
   data: null,           // loaded from dane.json
   view: 'home',         // home | plan | trans | charts | timeline
   yr: new Date().getFullYear(),
@@ -390,7 +415,7 @@ function applyMutationToCache(action, payload) {
       if (i >= 0) STATE.localEdits.added.splice(i, 1);
     });
   }
-  try { localStorage.setItem('cloudCache', JSON.stringify(STATE.data)); } catch (_) {}
+  try { localStorage.setItem(pk('cloudCache'), JSON.stringify(STATE.data)); } catch (_) {}
 }
 
 // Mobile keyboard fix: --vvh = wysokość visual viewport (klawiatura skraca)
@@ -415,26 +440,73 @@ document.addEventListener('focusin', (e) => {
 });
 
 // ============== DATA LOADING ==============
-const CLOUD_URL = 'https://script.google.com/macros/s/AKfycby1qc3GuHZMKifri5L1yMQ4jDox1uLHezQgT3k5uJU0PR3w9Dt1U0awvxUtGOxpF71w5A/exec';
+// Per-profile Cloud URL. Artur: deployed v5. Marta: dopisać po krok 3 (v5b w jej Sheecie).
+const CLOUD_URLS = {
+  artur: 'https://script.google.com/macros/s/AKfycby1qc3GuHZMKifri5L1yMQ4jDox1uLHezQgT3k5uJU0PR3w9Dt1U0awvxUtGOxpF71w5A/exec',
+  marta: 'https://script.google.com/macros/s/AKfycbxMoCPHlPD1HBhso29X5v_TWzzOYHz_w0zsiX0IODxyjxuvtbqn8wxAnsLGlh-fIENQ/exec',
+};
+const DATA_FILES = { artur: 'dane.json', marta: 'dane-marta.json' };
+function getCloudUrl() { return CLOUD_URLS[STATE.activeProfile] || ''; }
+function getDataFile() { return DATA_FILES[STATE.activeProfile] || 'dane.json'; }
+// Klucze localStorage per profile — dataMode, token, cache, edits, noApiBackend zaczynają być per-profile
+// (display/theme/filters zostają globalne — wspólne preferencje wyglądu).
+function pk(base) { return base + '_' + STATE.activeProfile; }
+// Migracja: stare klucze bez sufiksu traktuj jako klucze profilu Artur (pierwszy historyczny profil).
+function migrateLegacyLsKeys() {
+  const legacy = ['dataMode', 'cloudToken', 'cloudCache', 'localEdits', 'noApiBackend'];
+  legacy.forEach(k => {
+    const old = localStorage.getItem(k);
+    if (old != null && localStorage.getItem(k + '_artur') == null) {
+      localStorage.setItem(k + '_artur', old);
+      localStorage.removeItem(k);
+    }
+  });
+}
+
+// Przełączenie profilu — re-loaduje wszystkie dane, CATS, settings.
+async function switchProfile(p) {
+  if (p !== 'artur' && p !== 'marta') return;
+  if (STATE.activeProfile === p) return;
+  STATE.activeProfile = p;
+  localStorage.setItem('activeProfile', p);
+  CATS = getCats();
+  // Reset month do bieżącego (każdy profil może mieć inny zakres danych)
+  const today = new Date();
+  STATE.yr = today.getFullYear();
+  STATE.mi = today.getMonth() + 1;
+  STATE.data = null;
+  await loadData();
+}
+
 const EMPTY_EDITS = { added: [], updated: {}, deleted: [], templates: {}, addedTemplates: [], deletedTemplates: [], planOverrides: {}, paidRecurring: {} };
 
 async function loadData() {
   document.body.classList.add('fonts-loading');
+  // Restore active profile + migracja starych kluczy (artur = legacy default)
+  const ap = localStorage.getItem('activeProfile');
+  if (ap === 'artur' || ap === 'marta') STATE.activeProfile = ap;
+  migrateLegacyLsKeys();
+  CATS = getCats();
   // Zawsze startuj na bieżącym miesiącu — nie ma persystencji mi/yr (celowo)
   const today = new Date();
   STATE.yr = today.getFullYear();
   STATE.mi = today.getMonth() + 1;
-  // Restore dataMode + cloudToken z localStorage zanim cokolwiek
-  const dm = localStorage.getItem('dataMode');
-  if (dm === 'local' || dm === 'cloud') STATE.dataMode = dm;
-  const tk = localStorage.getItem('cloudToken');
-  if (tk) STATE.cloudToken = tk;
+  // Restore dataMode + cloudToken z localStorage (per profile) zanim cokolwiek
+  const dm = localStorage.getItem(pk('dataMode'));
+  STATE.dataMode = (dm === 'local' || dm === 'cloud') ? dm : 'local';
+  STATE.cloudToken = localStorage.getItem(pk('cloudToken')) || '';
   if (typeof syncDataModeSeg === 'function') syncDataModeSeg();
+
+  // Marta nie ma jeszcze Cloud URL — force local jeśli profil nie ma deployed Apps Script
+  if (STATE.dataMode === 'cloud' && !getCloudUrl()) {
+    STATE.dataMode = 'local';
+    toast('Cloud dla tego profilu nie skonfigurowany — Local', 'err');
+  }
 
   if (STATE.dataMode === 'cloud') {
     // Stale-while-revalidate: pokaż cache od razu, w tle pobierz świeże
     let hadCache = false;
-    const cached = localStorage.getItem('cloudCache');
+    const cached = localStorage.getItem(pk('cloudCache'));
     if (cached) {
       try { STATE.data = JSON.parse(cached); hadCache = true; } catch (_) {}
     }
@@ -443,7 +515,7 @@ async function loadData() {
     const refresh = (async () => {
       syncStart(hadCache ? 'Odświeżanie...' : 'Wczytywanie z chmury...');
       try {
-        const r = await fetch(CLOUD_URL + '?action=getAll');
+        const r = await fetch(getCloudUrl() + '?action=getAll');
         if (!r.ok) throw new Error('HTTP ' + r.status);
         const j = await r.json();
         if (!j.ok) throw new Error(j.error || 'unknown cloud error');
@@ -453,7 +525,7 @@ async function loadData() {
         const cachedNoMeta = STATE.data ? JSON.stringify({ wpisy: STATE.data.wpisy, templates: STATE.data.templates, plany: STATE.data.plany }) : null;
         const identical = hadCache && cachedNoMeta === freshStr;
         STATE.data = { ...fresh, meta: j.meta };
-        try { localStorage.setItem('cloudCache', JSON.stringify(STATE.data)); } catch (_) {}
+        try { localStorage.setItem(pk('cloudCache'), JSON.stringify(STATE.data)); } catch (_) {}
         if (hadCache && !identical) render();
         if (identical) toast('Aktualne');
       } catch (e) {
@@ -479,13 +551,13 @@ async function loadData() {
     // else: refresh leci w tle, kontynuujemy z cache
   } else {
     try {
-      const r = await fetch('dane.json');
+      const r = await fetch(getDataFile());
       if (!r.ok) throw new Error('fetch failed');
       STATE.data = await r.json();
     } catch (e) {
       document.getElementById('app').innerHTML = `
         <div class="loading">
-          Nie udało się wczytać <code>dane.json</code>.<br><br>
+          Nie udało się wczytać <code>${getDataFile()}</code>.<br><br>
           Jeśli otwierasz przez <code>file://</code> — Chrome blokuje fetch.<br>
           Odpal lokalny serwer: <code>node serve.js</code> w folderze projektu<br>
           i otwórz <code>http://localhost:XXXX</code>.
@@ -495,25 +567,27 @@ async function loadData() {
     }
     // Load local edits — serwer jest źródłem prawdy; localStorage tylko gdy serwer niedostępny.
     // Po pierwszym 404 zapamiętujemy "no API" w localStorage permanentnie — zero 404 spamu w konsoli.
-    // Jeśli odpalasz serve.js po tym: `localStorage.removeItem('noApiBackend')` w DevTools i reload.
-    const noApi = localStorage.getItem('noApiBackend') === '1';
+    // Per profile — Marta nie ma serwera (jej dane nie są w serve.js), więc force no-api dla niej.
+    // ZAWSZE reset najpierw — po profile switchu nie chcemy localEdits poprzedniego profilu (added stałe, etc).
+    STATE.localEdits = { ...EMPTY_EDITS };
+    const noApi = STATE.activeProfile === 'marta' || localStorage.getItem(pk('noApiBackend')) === '1';
     if (!noApi) {
       try {
         const r = await fetch('/api/edits');
         if (r.ok) {
           const fromApi = await r.json();
           STATE.localEdits = { ...EMPTY_EDITS, ...fromApi };
-          try { localStorage.setItem('localEdits', JSON.stringify(STATE.localEdits)); } catch {}
+          try { localStorage.setItem(pk('localEdits'), JSON.stringify(STATE.localEdits)); } catch {}
         } else {
-          if (r.status === 404) localStorage.setItem('noApiBackend', '1');
+          if (r.status === 404) localStorage.setItem(pk('noApiBackend'), '1');
           throw new Error('HTTP ' + r.status);
         }
       } catch (_) {
-        const saved = localStorage.getItem('localEdits');
+        const saved = localStorage.getItem(pk('localEdits'));
         if (saved) { try { STATE.localEdits = { ...EMPTY_EDITS, ...JSON.parse(saved) }; } catch {} }
       }
     } else {
-      const saved = localStorage.getItem('localEdits');
+      const saved = localStorage.getItem(pk('localEdits'));
       if (saved) { try { STATE.localEdits = { ...EMPTY_EDITS, ...JSON.parse(saved) }; } catch {} }
     }
   }
@@ -562,7 +636,7 @@ async function loadData() {
 function saveLocal() {
   // W cloud mode edycje sa ephemeralne (idą wprost do Sheets), nie persistujemy lokalnie
   if (STATE.dataMode === 'cloud') return;
-  try { localStorage.setItem('localEdits', JSON.stringify(STATE.localEdits)); } catch {}
+  try { localStorage.setItem(pk('localEdits'), JSON.stringify(STATE.localEdits)); } catch {}
 }
 
 // ===== API helpers (server-side persistence — mirror Apps Script doPost shape) =====
@@ -570,14 +644,15 @@ async function api(url, opts = {}) {
   const isMutation = opts.method && opts.method !== 'GET';
   if (STATE.dataMode === 'cloud' && isMutation) return cloudCall(url, opts);
   // Skip jeśli już wiemy że nie ma backendu API (static server, GitHub Pages) — mutacje lecą tylko do localStorage przez saveLocal()
-  if (localStorage.getItem('noApiBackend') === '1') return;
+  // Marta nie ma serwera dla swoich danych — force skip.
+  if (STATE.activeProfile === 'marta' || localStorage.getItem(pk('noApiBackend')) === '1') return;
   try {
     const r = await fetch(url, {
       headers: { 'Content-Type': 'application/json' },
       ...opts,
     });
     if (!r.ok) {
-      if (r.status === 404) localStorage.setItem('noApiBackend', '1');
+      if (r.status === 404) localStorage.setItem(pk('noApiBackend'), '1');
       console.warn('API', url, 'HTTP', r.status);
     }
     return r;
@@ -586,6 +661,10 @@ async function api(url, opts = {}) {
 
 // Routuje lokalne URL+method na Apps Script {action, token, ...}
 async function cloudCall(localUrl, opts) {
+  if (!getCloudUrl()) {
+    toast('Cloud dla profilu ' + STATE.activeProfile + ' nie skonfigurowany', 'err');
+    return;
+  }
   if (!STATE.cloudToken) {
     toast('Brak tokenu — wpisz w Ustawieniach', 'err');
     return;
@@ -610,7 +689,7 @@ async function cloudCall(localUrl, opts) {
   }
   syncStart('Zapis do chmury...');
   try {
-    const r = await fetch(CLOUD_URL, {
+    const r = await fetch(getCloudUrl(), {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // bypass CORS preflight
       body: JSON.stringify(payload),
@@ -752,7 +831,7 @@ async function materializeMonth(yr = STATE.yr, mi = STATE.mi) {
     render(); // optimistic UI
     syncStart('Tworzenie ' + newWpisy.length + ' Stałych...');
     try {
-      const r = await fetch(CLOUD_URL, {
+      const r = await fetch(getCloudUrl(), {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({ token: STATE.cloudToken, action: 'bulkAddWpis', wpisy: newWpisy }),
@@ -774,7 +853,8 @@ async function materializeMonth(yr = STATE.yr, mi = STATE.mi) {
     return newWpisy.length;
   }
   // Local mode (z API albo bez) — gdy brak API backendu, materializujemy klient-side identycznie jak w cloud
-  if (localStorage.getItem('noApiBackend') === '1') {
+  // Marta zawsze leci klient-side (jej dane nie są w serve.js).
+  if (STATE.activeProfile === 'marta' || localStorage.getItem(pk('noApiBackend')) === '1') {
     const allTemplates = [...STATE.data.templates, ...(STATE.localEdits.addedTemplates || [])];
     const allWpisy = getAllWpisy();
     const monthly = allTemplates.filter(t => t.aktywny && t.freq === 'monthly');
@@ -798,7 +878,7 @@ async function materializeMonth(yr = STATE.yr, mi = STATE.mi) {
       body: JSON.stringify({ rok: yr, miesiac: mi }),
     });
     if (!r.ok) {
-      if (r.status === 404) localStorage.setItem('noApiBackend', '1');
+      if (r.status === 404) localStorage.setItem(pk('noApiBackend'), '1');
       throw new Error('HTTP ' + r.status);
     }
     const out = await r.json();

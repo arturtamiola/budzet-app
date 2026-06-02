@@ -6,6 +6,7 @@ node_modules/
 
 # Dane lokalne — żyją tylko na lapku Artura
 dane.json
+dane-marta.json
 dane-edits.json
 backups/
 

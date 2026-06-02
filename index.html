@@ -64,8 +64,18 @@
 <!-- HISTORIA LEGEND (poza #app żeby position:fixed działał, #app ma will-change:transform) -->
 <div id="tl-legend-host" class="tl-legend-fixed" style="display:none"></div>
 
-<!-- BOTTOM NAV -->
+<!-- BOTTOM NAV (na desktopie transformowana w sidebar) -->
 <div class="bnav">
+  <!-- Brand (tylko desktop sidebar; mobile ma topbar) -->
+  <div class="bnav-brand">
+    <div class="bnav-brand-name">Budżet</div>
+    <div class="bnav-brand-sub" id="bnav-brand-sub">Artur</div>
+  </div>
+  <!-- Dodaj (tylko desktop sidebar; mobile ma inline button w widoku) -->
+  <div class="nav-item nav-add" id="sidebar-add">
+    <div class="circle"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></div>
+    <div class="lbl">Dodaj</div>
+  </div>
   <div class="nav-item" data-view="home">
     <div class="circle"><svg viewBox="0 0 24 24"><path d="M3 12L12 3l9 9M5 10v10h4v-6h6v6h4V10"/></svg></div>
     <div class="lbl">Home</div>
@@ -76,7 +86,7 @@
   </div>
   <div class="nav-item" data-view="trans">
     <div class="circle"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1.2"/><circle cx="4" cy="12" r="1.2"/><circle cx="4" cy="18" r="1.2"/></svg></div>
-    <div class="lbl">Trans.</div>
+    <div class="lbl"><span class="lbl-short">Trans.</span><span class="lbl-full">Transakcje</span></div>
   </div>
   <div class="nav-item" data-view="timeline">
     <div class="circle"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
@@ -139,6 +149,13 @@
     <div class="close" data-close>×</div>
   </div>
   <div class="body" style="padding:0">
+    <div class="set-section"><div class="h">Profil</div></div>
+    <div class="set-row"><div><div class="lbl">Aktywny profil</div><div class="sub">Każdy ma swoje dane, kategorie, cloud</div></div>
+      <div class="seg-3" id="profile-seg">
+        <span class="seg" data-profile="artur">Artur</span>
+        <span class="seg" data-profile="marta">Marta</span>
+      </div>
+    </div>
     <div class="set-section"><div class="h">Wygląd</div></div>
     <div class="set-row"><div><div class="lbl">Tryb ciemny</div><div class="sub">Auto = wg systemu</div></div>
       <div class="seg-3" id="theme-seg">

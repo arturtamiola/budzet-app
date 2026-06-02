@@ -454,7 +454,7 @@ function renderAddBody() {
   // 2. NAZWA
   body.appendChild(el('div', { style: 'margin-bottom:16px' }, [
     el('div', { class: 'caps-i', style: 'margin-bottom:6px' }, ['Nazwa']),
-    el('input', { type: 'text', placeholder: addState.tryb === 'stale' ? 'np. Netflix' : 'np. Tankowanie · Orlen', value: addState.nazwa || '', class: 'fld-input txt', oninput: (e) => addState.nazwa = e.target.value }),
+    el('input', { type: 'text', placeholder: addState.tryb === 'stale' ? 'np. Netflix' : 'np. Tankowanie', value: addState.nazwa || '', class: 'fld-input txt', oninput: (e) => addState.nazwa = e.target.value }),
   ]));
 
   // 3. KATEGORIA — ukryta dla przychodu (sama kwota+nazwa)
@@ -590,12 +590,26 @@ const Keypad = {
     // Drugi tap w ten sam input = no-op (keypad zostaje otwarty). Zamykanie tylko przez klik na zewnątrz / Confirm / close modalu.
     if (this.active && this.active.input === input) return;
     const wasActive = !!this.active;
+    // Cleanup poprzedniego inputa: caret + restore placeholder + click handler
+    if (this.active && this.active.input !== input) {
+      this._removeInputCaret();
+      this._restorePlaceholder();
+      this._detachClickHandler();
+    }
     input.setAttribute('readonly', '');
     input.setAttribute('inputmode', 'none');
-    this.active = { input, mode, val: String(input.value || ''), shift: false, alphaSub: null };
+    // Zapisz oryginalny placeholder, schowaj na czas pisania (znika natychmiast po klik,
+    // nie czeka na pierwszą literę). Restore w close() / przy przełączeniu inputa.
+    const origPlaceholder = input.getAttribute('placeholder');
+    if (origPlaceholder != null) input.setAttribute('placeholder', '');
+    const initVal = String(input.value || '');
+    this.active = { input, mode, val: initVal, shift: false, alphaSub: null, origPlaceholder, cursor: initVal.length };
     document.body.classList.add('kp-open');
     document.documentElement.style.setProperty('--kp-h', (mode === 'alpha' ? 280 : 240) + 'px');
     this.render();
+    this._updateInputCaret();
+    this._attachClickHandler();
+    this._startBlink();
     // Switch z innego inputa → wanimuj zmianę treści (slide + fade)
     if (wasActive) {
       const root = document.getElementById('keypad-root');
@@ -610,6 +624,10 @@ const Keypad = {
 
   close() {
     if (!this.active) return;
+    this._stopBlink();
+    this._removeInputCaret();
+    this._restorePlaceholder();
+    this._detachClickHandler();
     document.body.classList.remove('kp-open');
     this.active = null;
     const root = document.getElementById('keypad-root');
@@ -622,39 +640,38 @@ const Keypad = {
     if (!a) return;
     if (key === 'CONFIRM') { this.close(); return; }
     if (key === 'BACKSPACE') {
-      a.val = a.val.slice(0, -1);
+      // Usuń znak PRZED kursorem (jeśli kursor > 0)
+      if (a.cursor > 0) {
+        a.val = a.val.slice(0, a.cursor - 1) + a.val.slice(a.cursor);
+        a.cursor--;
+      }
     } else if (key === 'SHIFT') {
       a.shift = !a.shift;
     } else if (key === 'MODE_NUM') {
       a.alphaSub = a.alphaSub === 'num' ? null : 'num';
     } else if (key === 'SPACE') {
-      a.val += ' ';
+      a.val = a.val.slice(0, a.cursor) + ' ' + a.val.slice(a.cursor);
+      a.cursor++;
     } else {
+      // Wstaw znak NA POZYCJI kursora (zamiast tylko append na koniec)
       const ch = a.shift ? key.toUpperCase() : key;
-      a.val += ch;
+      a.val = a.val.slice(0, a.cursor) + ch + a.val.slice(a.cursor);
+      a.cursor++;
       if (a.shift) a.shift = false;
     }
     a.input.value = a.val;
     a.input.dispatchEvent(new Event('input', { bubbles: true }));
     this.render();
+    this._updateInputCaret();
   },
 
   render() {
     const a = this.active;
     if (!a) return;
     const root = document.getElementById('keypad-root');
-    const echoVal = a.val || (a.mode === 'numeric' ? '0' : '');
-    const ghost = a.mode === 'numeric' ? '<span class="gh"> PLN</span>' : (a.val ? '' : '<span class="gh">tap żeby pisać…</span>');
-    const echoCls = a.mode === 'alpha' ? 'kp-echo alpha' : 'kp-echo';
-    // Caret na końcu val (etap 1: tylko wizualnie, kursor zawsze na końcu).
-    // Gdy val pusty + ghost widoczny → caret PRZED ghostem żeby user wiedział gdzie wstawi.
-    const caret = '<span class="kp-caret"></span>';
-    const echoHtml = a.val
-      ? `${this._esc(echoVal)}${caret}${ghost}`
-      : `${caret}${this._esc(echoVal)}${ghost}`;
+    // Echo schowane w CSS — wartość pokazujemy w polu input (na górze modalu).
     const head = `
       <div class="kp-head">
-        <div class="${echoCls}">${echoHtml}</div>
         <button class="kp-confirm" data-k="CONFIRM"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>OK</button>
       </div>`;
     let body;
@@ -665,6 +682,7 @@ const Keypad = {
           <div class="k aux" data-k=".">.</div>
           <div class="k" data-k="0">0</div>
           <div class="k del" data-k="BACKSPACE"><svg viewBox="0 0 24 24"><path d="M3 12l5-7h12v14H8z"/><line x1="14" y1="9" x2="18" y2="13"/><line x1="18" y1="9" x2="14" y2="13"/></svg></div>
+          <div class="k ok" data-k="CONFIRM">OK</div>
         </div>`;
     } else {
       // alpha QWERTY + Polish chars row
@@ -690,6 +708,7 @@ const Keypad = {
         <div class="k space" data-k="SPACE">spacja</div>
         <div class="k" data-k=",">,</div>
         <div class="k" data-k=".">.</div>
+        <div class="k ok wide" data-k="CONFIRM">OK</div>
       </div>`;
       body = `<div class="kp-alpha">${r0}${rNums}${bottom}</div>`;
     }
@@ -712,6 +731,127 @@ const Keypad = {
   },
 
   _esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;' }[c])); },
+
+  // Custom caret w POLU INPUT (KWOTA/NAZWA) — bo input z readonly nie pokazuje natywnego.
+  // Mierzy szerokość tekstu PRZED kursorem canvas-em, pozycjonuje span:absolute.
+  // Parent inputa dostaje position:relative jeśli był static. Cleanup w close().
+  // Wysokość = ~85% font-size, pionowo wycentrowane w inpucie.
+  // Hidden span do dokładnego mierzenia szerokości tekstu - używa browser layout engine
+  // (uwzględnia kerning, sub-pixel rendering, letter-spacing) zamiast canvas measureText.
+  _measureWidth(cs, txt) {
+    if (!Keypad._mspan) {
+      Keypad._mspan = document.createElement('span');
+      Keypad._mspan.style.cssText = 'position:absolute;visibility:hidden;white-space:pre;top:-9999px;left:-9999px;';
+      document.body.appendChild(Keypad._mspan);
+    }
+    const span = Keypad._mspan;
+    span.style.fontFamily = cs.fontFamily;
+    span.style.fontSize = cs.fontSize;
+    span.style.fontWeight = cs.fontWeight;
+    span.style.fontStyle = cs.fontStyle;
+    span.style.letterSpacing = cs.letterSpacing;
+    span.textContent = txt;
+    return span.getBoundingClientRect().width;
+  },
+
+  _updateInputCaret() {
+    const a = this.active;
+    if (!a || !a.input) return;
+    const input = a.input;
+    const parent = input.parentElement;
+    if (!parent) return;
+    if (getComputedStyle(parent).position === 'static') parent.style.position = 'relative';
+    let caret = parent.querySelector('.kp-input-caret');
+    if (!caret) {
+      caret = document.createElement('span');
+      caret.className = 'kp-input-caret';
+      parent.appendChild(caret);
+    }
+    const cs = getComputedStyle(input);
+    const txtBefore = (input.value || '').slice(0, a.cursor);
+    const txtWidth = this._measureWidth(cs, txtBefore);
+    const padL = parseFloat(cs.paddingLeft) || 0;
+    const fontSize = parseFloat(cs.fontSize);
+    const inputH = input.offsetHeight;
+    const caretH = fontSize * 1.15;
+    const topOffset = input.offsetTop + (inputH - caretH) / 2;
+    // Negative letter-spacing (np. Anton -1.5px w polu KWOTA) — cyfry zachodzą na siebie.
+    // Caret aligned do edge wygląda jakby zlewał się z następnym znakiem. Kompensujemy
+    // przesunięciem o połowę letter-spacing w lewo żeby caret był wizualnie w "środku" overlap.
+    const ls = parseFloat(cs.letterSpacing) || 0;
+    const lsOffset = ls < 0 && txtBefore.length > 0 ? ls / 2 : 0;
+    caret.style.left = (input.offsetLeft + padL + txtWidth + lsOffset) + 'px';
+    caret.style.top = topOffset + 'px';
+    caret.style.height = caretH + 'px';
+  },
+
+  // Klik w pole input → pozycjonowanie kursora pomiędzy znakami.
+  // Measurement-based: dla każdego prefix length mierzymy width hidden spanem,
+  // wybieramy index dla którego prefix.width najbliżej clickX.
+  _attachClickHandler() {
+    const a = this.active;
+    if (!a || !a.input) return;
+    const handler = (e) => {
+      if (!Keypad.active || Keypad.active.input !== a.input) return;
+      const input = a.input;
+      const rect = input.getBoundingClientRect();
+      const cs = getComputedStyle(input);
+      const padL = parseFloat(cs.paddingLeft) || 0;
+      const clickX = e.clientX - rect.left - padL;
+      const val = a.val;
+      let bestIdx = 0;
+      let bestDiff = Infinity;
+      for (let i = 0; i <= val.length; i++) {
+        const w = Keypad._measureWidth(cs, val.slice(0, i));
+        const diff = Math.abs(w - clickX);
+        if (diff < bestDiff) { bestDiff = diff; bestIdx = i; }
+      }
+      a.cursor = bestIdx;
+      Keypad._updateInputCaret();
+    };
+    a.input.addEventListener('pointerdown', handler);
+    a._clickHandler = handler;
+  },
+
+  _detachClickHandler() {
+    if (!this.active || !this.active.input || !this.active._clickHandler) return;
+    this.active.input.removeEventListener('pointerdown', this.active._clickHandler);
+    this.active._clickHandler = null;
+  },
+
+  _removeInputCaret() {
+    if (!this.active || !this.active.input) return;
+    const parent = this.active.input.parentElement;
+    if (!parent) return;
+    const caret = parent.querySelector('.kp-input-caret');
+    if (caret) caret.remove();
+  },
+
+  _restorePlaceholder() {
+    const a = this.active;
+    if (!a || !a.input || a.origPlaceholder == null) return;
+    a.input.setAttribute('placeholder', a.origPlaceholder);
+  },
+
+  // Blink via JS — toggle visibility co 500ms. Niezawodne, nie ścina się gdy
+  // _updateInputCaret() resetuje inline style (czego CSS animation nie wytrzymywała).
+  _startBlink() {
+    if (Keypad._blinkTimer) return;
+    let visible = true;
+    Keypad._blinkTimer = setInterval(() => {
+      const caret = document.querySelector('.kp-input-caret');
+      if (!caret) return;
+      visible = !visible;
+      caret.style.visibility = visible ? 'visible' : 'hidden';
+    }, 500);
+  },
+
+  _stopBlink() {
+    if (Keypad._blinkTimer) {
+      clearInterval(Keypad._blinkTimer);
+      Keypad._blinkTimer = null;
+    }
+  },
 };
 
 // Auto-wire: na mobile każdy input[type=number] (kwota) i input[type=text] (notatka) w modalach

@@ -231,6 +231,7 @@ function planRow(kat) {
   const plan = getPlan(kat);
   const pct = plan > 0 ? Math.round((actual / plan) * 100) : 0;
   const empty = actual === 0 && plan === 0;
+  const left = plan - actual; // ile zostało do wydania (ujemne = przekroczone)
   const cls = 'pr' + (empty ? ' empty' : '') + (pct >= 100 ? ' over' : pct >= 80 ? ' warn' : '');
   return el('div', { class: cls, onclick: () => openPlanEdit() }, [
     el('div', { class: 'name' }, [
@@ -238,7 +239,7 @@ function planRow(kat) {
       kat,
     ]),
     el('div', { class: 'val' }, [
-      el('span', { class: 'a num' }, [actual > 0 ? fmtAmt(actual) : '—']),
+      el('span', { class: 'a num' }, [plan > 0 ? fmtH(left) : '—']),
       el('span', { class: 'b num' }, [`/ ${plan > 0 ? fmtH(plan) : '0'}`]),
     ]),
     el('div', { class: 'bar' }, [el('div', { style: `width:${Math.min(100, pct)}%` })]),
@@ -252,11 +253,12 @@ function planBarTile(kat) {
   const plan = getPlan(kat);
   const pct = plan > 0 ? Math.round((actual / plan) * 100) : 0;
   const empty = actual === 0 && plan === 0;
+  const left = plan - actual; // ile zostało do wydania (ujemne = przekroczone)
   const cls = 'plan-tile bar' + (empty ? ' empty' : '') + (pct >= 100 ? ' over' : pct >= 80 ? ' warn' : '');
   return el('div', { class: cls, onclick: () => openPlanEdit() }, [
     el('div', { class: 'plan-tile-nm' }, [kat]),
     el('div', { class: 'plan-tile-v num' }, [
-      actual > 0 ? fmtAmt(actual) : '—',
+      plan > 0 ? fmtH(left) : '—',
       plan > 0 ? el('span', { class: 'planned' }, [`/${fmtH(plan)}`]) : null,
     ].filter(Boolean)),
     el('div', { class: 'plan-tile-bar' }, [el('div', { style: `width:${Math.min(100, pct)}%` })]),
@@ -279,13 +281,14 @@ function planDonutTile(kat) {
             stroke-dasharray="${dash} ${c}" stroke-linecap="round"
             transform="rotate(-90 18 18)"/>
   </svg>`;
+  const left = plan - actual; // ile zostało do wydania (ujemne = przekroczone)
   return el('div', { class: cls, onclick: () => openPlanEdit() }, [
     el('div', { class: 'plan-donut-svg' }, [
       el('span', { html: donutHtml }),
       el('span', { class: 'plan-donut-pct' }, [plan > 0 ? pct + '%' : '—']),
     ]),
     el('div', { class: 'plan-donut-nm' }, [kat]),
-    el('div', { class: 'plan-donut-amt num' }, [actual > 0 ? fmtAmt(actual) : '—']),
+    el('div', { class: 'plan-donut-amt num' }, [plan > 0 ? fmtH(left) : '—']),
     el('div', { class: 'plan-donut-limit' }, [`/ ${plan > 0 ? fmtH(plan) : '0'}`]),
   ]);
 }
