@@ -10,8 +10,17 @@
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Anton&display=swap">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Anton&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
-<link rel="icon" href="data:,">
-<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" defer></script>
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="manifest" href="manifest.json">
+<!-- iOS PWA: full-screen, bez address bara po dodaniu na ekran startowy -->
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Budżet">
+<!-- ExcelJS — pełne wsparcie stylów (fonty, kolory, borders, fills, merges) przy read+write.
+     SheetJS community degraduje style przy zapisie; xlsx-js-style tylko częściowo.
+     ExcelJS roundtrip jest bezstratny — używamy do template-based eksportu xlsx. -->
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js" defer></script>
 </head>
 <body class="light">
 <script>
@@ -70,11 +79,6 @@
   <div class="bnav-brand">
     <div class="bnav-brand-name">Budżet</div>
     <div class="bnav-brand-sub" id="bnav-brand-sub">Artur</div>
-  </div>
-  <!-- Dodaj (tylko desktop sidebar; mobile ma inline button w widoku) -->
-  <div class="nav-item nav-add" id="sidebar-add">
-    <div class="circle"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></div>
-    <div class="lbl">Dodaj</div>
   </div>
   <div class="nav-item" data-view="home">
     <div class="circle"><svg viewBox="0 0 24 24"><path d="M3 12L12 3l9 9M5 10v10h4v-6h6v6h4V10"/></svg></div>
@@ -188,5 +192,15 @@
 <script src="js/views.js"></script>
 <script src="js/modals.js"></script>
 <script src="js/app.js"></script>
+<script>
+  // Service Worker — offline support + cache
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js')
+        .then((reg) => console.log('[SW] zarejestrowany, scope:', reg.scope))
+        .catch((err) => console.warn('[SW] błąd rejestracji:', err));
+    });
+  }
+</script>
 </body>
 </html>

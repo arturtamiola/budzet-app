@@ -269,7 +269,6 @@ function boot() {
   });
   $('#gear-btn').addEventListener('click', () => { showSheet('settings-sheet'); syncSettingsUi(); });
   $('#sidebar-gear')?.addEventListener('click', () => { showSheet('settings-sheet'); syncSettingsUi(); });
-  $('#sidebar-add')?.addEventListener('click', () => openAddModal('transakcja'));
   // Filtry toggle — pokazuje/ukrywa .ctrl-host w bieżącym widoku
   try {
     const saved = localStorage.getItem('uiCtrlsOpen');
