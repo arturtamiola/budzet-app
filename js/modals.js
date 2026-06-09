@@ -430,6 +430,52 @@ function promoteTransToStale(w) {
   render();
 }
 
+// Suggestion z historii: dedup po nazwie (lowercase), sort po częstości użycia,
+// dane (kwota, kategoria, kierunek) z najnowszego wpisu z daną nazwą.
+function getNazwaSuggestions(prefix) {
+  if (!prefix || !prefix.trim()) return [];
+  const p = prefix.trim().toLowerCase();
+  const map = new Map();
+  const wpisy = getAllWpisy();
+  for (const w of wpisy) {
+    if (!w.nazwa) continue;
+    const nl = w.nazwa.toLowerCase();
+    if (!nl.startsWith(p)) continue; // prefix match — "ta" → Tankowanie, nie LewiaTAn
+    const ym = (w.rok || 0) * 12 + (w.miesiac || 0);
+    if (!map.has(nl)) {
+      map.set(nl, { nazwa: w.nazwa, kwota: w.kwota, kategoria: w.kategoria, kierunek: w.kierunek || 'wydatek', count: 1, last: ym });
+    } else {
+      const e = map.get(nl);
+      e.count++;
+      if (ym > e.last) { e.last = ym; e.kwota = w.kwota; e.kategoria = w.kategoria; e.kierunek = w.kierunek || 'wydatek'; e.nazwa = w.nazwa; }
+    }
+  }
+  return [...map.values()].sort((a, b) => b.count - a.count).slice(0, 6);
+}
+
+function renderNazwaSug(host, prefix) {
+  const items = getNazwaSuggestions(prefix);
+  host.innerHTML = '';
+  if (!items.length) { host.style.display = 'none'; return; }
+  host.style.display = 'block';
+  items.forEach(it => {
+    const row = el('div', {
+      style: 'padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--border-2);font-size:var(--txt-name-size);font-weight:var(--txt-name-weight);color:var(--fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap',
+      onmouseenter: (e) => e.currentTarget.style.background = 'var(--surface)',
+      onmouseleave: (e) => e.currentTarget.style.background = '',
+      onclick: () => {
+        addState.nazwa = it.nazwa;
+        addState.kwota = it.kwota;
+        addState.kategoria = it.kategoria;
+        if (addState.tryb === 'transakcja') addState.kierunek = it.kierunek;
+        host.style.display = 'none';
+        renderAddBody();
+      },
+    }, [it.nazwa]);
+    host.appendChild(row);
+  });
+}
+
 // ============== ADD MODAL (Task 9) ==============
 let addState = null;
 
@@ -485,10 +531,27 @@ function renderAddBody() {
     ]),
   ]));
 
-  // 2. NAZWA
-  body.appendChild(el('div', { style: 'margin-bottom:16px' }, [
+  // 2. NAZWA + auto-suggest dropdown z historii
+  const sugBox = el('div', {
+    id: 'nazwa-sug',
+    style: 'position:absolute;top:100%;left:0;right:0;background:var(--card);border:1px solid var(--border-2);border-top:none;max-height:240px;overflow-y:auto;z-index:50;display:none',
+  });
+  const nazwaInput = el('input', {
+    type: 'text',
+    placeholder: addState.tryb === 'stale' ? 'np. Netflix' : 'np. Tankowanie',
+    value: addState.nazwa || '',
+    class: 'fld-input txt',
+    autocomplete: 'off',
+    oninput: (e) => {
+      addState.nazwa = e.target.value;
+      renderNazwaSug(sugBox, e.target.value);
+    },
+    onfocus: (e) => renderNazwaSug(sugBox, e.target.value),
+    onblur: () => setTimeout(() => { sugBox.style.display = 'none'; }, 150), // delay żeby klik na suggestion zdążył
+  });
+  body.appendChild(el('div', { style: 'margin-bottom:16px;position:relative' }, [
     el('div', { class: 'caps-i', style: 'margin-bottom:6px' }, ['Nazwa']),
-    el('input', { type: 'text', placeholder: addState.tryb === 'stale' ? 'np. Netflix' : 'np. Tankowanie', value: addState.nazwa || '', class: 'fld-input txt', oninput: (e) => addState.nazwa = e.target.value }),
+    el('div', { style: 'position:relative' }, [nazwaInput, sugBox]),
   ]));
 
   // 3. KATEGORIA — ukryta dla przychodu (sama kwota+nazwa)
