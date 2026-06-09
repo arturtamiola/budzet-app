@@ -19,6 +19,7 @@ reseed-sheets.js
 sync-from-sheets.js
 test-convert.js
 sheets-import/
+_tmp-*
 
 # Podglądy dev
 podglad.html

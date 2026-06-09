@@ -243,21 +243,28 @@ function renderEditBody() {
     ]));
   }
 
+  // Promote transakcję do Stałych (każda transakcja bez template_id)
+  if (w.typ === 'transakcja' && w.template_id == null) {
+    body.appendChild(el('div', { style: 'padding:14px 0;border-top:1px solid #f0f0f0' }, [
+      el('button', { style: 'width:100%;padding:12px;background:var(--card);border:1px solid var(--accent);font-family:Anton;font-size:var(--txt-amt-sm);letter-spacing:var(--txt-amt-sm-lsp);cursor:pointer', onclick: () => promoteTransToStale(w) }, ['Dodaj do stałych ↻']),
+    ]));
+  }
+
   // Foot: dla Stałych — dwa Usuń obok siebie nad ZAPISZ; dla reszty — Usuń nad ZAPISZ
   if (w.typ === 'stale' && w.template_id != null) {
     foot.appendChild(el('div', { style: 'display:flex;gap:8px' }, [
       el('button', {
-        style: 'flex:1;padding:14px;background:var(--card);border:1px solid #ef4444;color:var(--danger-2);cursor:pointer;font-weight:var(--txt-name-weight);font-size:var(--txt-name-size);letter-spacing:0.3px',
+        style: 'flex:1;padding:14px;background:var(--card);border:1px solid #ef4444;color:var(--danger-2);cursor:pointer;font-family:Anton;font-size:var(--txt-amt-sm);letter-spacing:var(--txt-amt-sm-lsp)',
         onclick: deleteFromLightbox,
       }, ['Usuń ten miesiąc']),
       el('button', {
-        style: 'flex:1;padding:14px;background:var(--danger-2);border:none;color:#fff;cursor:pointer;font-weight:var(--txt-name-weight);font-size:var(--txt-name-size);letter-spacing:0.3px',
+        style: 'flex:1;padding:14px;background:var(--danger-2);border:none;color:#fff;cursor:pointer;font-family:Anton;font-size:var(--txt-amt-sm);letter-spacing:var(--txt-amt-sm-lsp)',
         onclick: deleteWholeTemplate,
       }, ['Usuń całkiem']),
     ]));
   } else {
     foot.appendChild(el('button', {
-      style: 'width:100%;padding:14px;background:var(--card);border:1px solid #ef4444;color:var(--danger-2);cursor:pointer;font-weight:var(--txt-name-weight);font-size:var(--txt-name-size);letter-spacing:0.3px',
+      style: 'width:100%;padding:14px;background:var(--card);border:1px solid #ef4444;color:var(--danger-2);cursor:pointer;font-family:Anton;font-size:var(--txt-amt-sm);letter-spacing:var(--txt-amt-sm-lsp)',
       onclick: deleteFromLightbox,
     }, ['Usuń']));
   }
@@ -392,6 +399,33 @@ function promoteAlertToNadchodzace(w) {
   apiAddWpis(newWpis);
   saveLocal();
   toast(`Dodano "${nazwa}" jako Nadchodzący ${targetYr}/${miesiac}`);
+  closeSheet();
+  render();
+}
+
+// Promote transakcji → template "monthly" (Stałe). Sama transakcja zostaje (placeholder dla tego mc nie tworzymy,
+// bo transakcja JUŻ jest w tym miesiącu zarejestrowana). Apka zacznie materializować od następnego miesiąca.
+function promoteTransToStale(w) {
+  const nazwa = prompt('Nazwa stałej:', w.nazwa);
+  if (!nazwa) return;
+  const kwota = Number(prompt('Kwota szacunku miesięcznego:', Math.abs(w.kwota))) || 0;
+  if (kwota <= 0) return;
+
+  const newTemplateId = Math.max(0, ...STATE.data.templates.map(t => t.id), ...Object.keys(STATE.localEdits.templates || {}).map(Number)) + 1;
+  if (!STATE.localEdits.addedTemplates) STATE.localEdits.addedTemplates = [];
+  const newTpl = {
+    id: newTemplateId,
+    nazwa,
+    kategoria: w.kategoria,
+    kierunek: w.kierunek || 'wydatek',
+    kwota_szacunek: kwota,
+    freq: 'monthly',
+    aktywny: true,
+  };
+  STATE.localEdits.addedTemplates.push(newTpl);
+  apiAddTemplate(newTpl);
+  saveLocal();
+  toast(`Dodano "${nazwa}" do stałych`);
   closeSheet();
   render();
 }
