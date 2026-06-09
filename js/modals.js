@@ -194,27 +194,21 @@ function renderEditBody() {
     ]));
   }
 
-  // Kierunek (dla transakcji edytowalne; dla stale/nadch fix wg template)
-  if (w.typ === 'transakcja') {
+  const isTrans = w.typ === 'transakcja';
+  const isIncome = w.kierunek === 'przychod'; // kierunek w edycji niezmienny — bierzemy z oryginału
+
+  // Kategoria — ukryta dla przychodu (przychod nie ma kategorii)
+  if (!isIncome) {
     body.appendChild(el('div', { style: 'margin-bottom:12px' }, [
-      el('div', { class: 'caps-i', style: 'margin-bottom:8px' }, ['Kierunek']),
-      el('div', { style: 'display:flex;gap:6px' }, [
-        el('span', { class: 'chip ' + (editState.kierunek === 'wydatek' ? 'active' : ''), onclick: () => { editState.kierunek = 'wydatek'; renderEditBody(); } }, ['Wydatek']),
-        el('span', { class: 'chip ' + (editState.kierunek === 'przychod' ? 'active' : ''), onclick: () => { editState.kierunek = 'przychod'; renderEditBody(); } }, ['Przychód']),
-      ]),
+      el('div', { class: 'caps-i', style: 'margin-bottom:10px' }, ['Kategoria']),
+      el('div', { class: 'ichips-wrap' }, CATS.map(k =>
+        ichip(k.split(' ')[0], catIcon(k), editState.kategoria === k, () => { editState.kategoria = k; renderEditBody(); }, editState.kategoria === k ? 'ylw' : '')
+      )),
     ]));
   }
 
-  // Kategoria
-  body.appendChild(el('div', { style: 'margin-bottom:12px' }, [
-    el('div', { class: 'caps-i', style: 'margin-bottom:10px' }, ['Kategoria']),
-    el('div', { class: 'ichips-wrap' }, CATS.map(k =>
-      ichip(k.split(' ')[0], catIcon(k), editState.kategoria === k, () => { editState.kategoria = k; renderEditBody(); }, editState.kategoria === k ? 'ylw' : '')
-    )),
-  ]));
-
-  // Toggle dzielony + udział partnera + anomalia — tylko dla nie-Stałych (Stałe nie mogą być wspólne/anomalia)
-  if (w.typ !== 'stale') {
+  // Toggle dzielony + udział partnera + anomalia — tylko dla nie-Stałych i nie przychodu
+  if (w.typ !== 'stale' && !isIncome) {
     body.appendChild(el('div', { style: 'padding:12px 0;border-top:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center;cursor:pointer', onclick: () => { editState.dzielony = !editState.dzielony; renderEditBody(); } }, [
       el('div', { style: 'font-size:var(--txt-name-size);font-weight:600' }, ['Wspólny wydatek ♥']),
       el('span', { class: 'toggle ' + (editState.dzielony ? 'on' : '') }),
@@ -237,20 +231,32 @@ function renderEditBody() {
   }
 
   // Promote do Nadchodzących (tylko dla alertów = transakcja z anomalia=true)
-  if (w.typ === 'transakcja' && w.anomalia) {
+  if (isTrans && w.anomalia && !isIncome) {
     body.appendChild(el('div', { style: 'padding:14px 0;border-top:1px solid #f0f0f0' }, [
       el('button', { style: 'width:100%;padding:12px;background:var(--accent);border:none;font-family:Anton;font-size:var(--txt-amt-sm);letter-spacing:var(--txt-amt-sm-lsp);cursor:pointer', onclick: () => promoteAlertToNadchodzace(w) }, ['Dodaj jako Nadchodzący ↑']),
     ]));
   }
 
-  // Promote transakcję do Stałych (każda transakcja bez template_id)
-  if (w.typ === 'transakcja' && w.template_id == null) {
+  // USUŃ + Dodaj do stałych — w body, w tej kolejności (dla zwykłych transakcji).
+  // Stałe (typ=stale z templatem) zostają w foot jako 2 buttony.
+  if (isTrans) {
     body.appendChild(el('div', { style: 'padding:14px 0;border-top:1px solid #f0f0f0' }, [
-      el('button', { style: 'width:100%;padding:12px;background:var(--card);border:1px solid var(--accent);font-family:Anton;font-size:var(--txt-amt-sm);letter-spacing:var(--txt-amt-sm-lsp);cursor:pointer', onclick: () => promoteTransToStale(w) }, ['Dodaj do stałych ↻']),
+      el('button', {
+        style: 'width:100%;padding:12px;background:var(--card);border:1px solid #ef4444;color:var(--danger-2);cursor:pointer;font-family:Anton;font-size:var(--txt-amt-sm);letter-spacing:var(--txt-amt-sm-lsp)',
+        onclick: deleteFromLightbox,
+      }, ['Usuń']),
     ]));
+    // Dodaj do stałych — tylko dla wydatkowych transakcji bez templatu
+    if (w.template_id == null && !isIncome) {
+      body.appendChild(el('div', { style: 'padding:14px 0' }, [
+        el('button', { style: 'width:100%;padding:12px;background:var(--card);border:1px solid var(--accent);font-family:Anton;font-size:var(--txt-amt-sm);letter-spacing:var(--txt-amt-sm-lsp);cursor:pointer', onclick: () => promoteTransToStale(w) }, ['Dodaj do stałych ↻']),
+      ]));
+    }
   }
 
-  // Foot: dla Stałych — dwa Usuń obok siebie nad ZAPISZ; dla reszty — Usuń nad ZAPISZ
+  // Foot: dla Stałych — dwa Usuń obok siebie nad ZAPISZ.
+  // Dla nadchodzących — Usuń nad ZAPISZ (tak jak było).
+  // Dla zwykłych transakcji — tylko ZAPISZ (Usuń poszedł do body).
   if (w.typ === 'stale' && w.template_id != null) {
     foot.appendChild(el('div', { style: 'display:flex;gap:8px' }, [
       el('button', {
@@ -262,7 +268,8 @@ function renderEditBody() {
         onclick: deleteWholeTemplate,
       }, ['Usuń całkiem']),
     ]));
-  } else {
+  } else if (!isTrans) {
+    // nadchodzace bez specjalnej obsługi — pojedynczy Usuń nad ZAPISZ
     foot.appendChild(el('button', {
       style: 'width:100%;padding:14px;background:var(--card);border:1px solid #ef4444;color:var(--danger-2);cursor:pointer;font-family:Anton;font-size:var(--txt-amt-sm);letter-spacing:var(--txt-amt-sm-lsp)',
       onclick: deleteFromLightbox,
