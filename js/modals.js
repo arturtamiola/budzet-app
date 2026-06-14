@@ -472,7 +472,8 @@ function renderNazwaSug(host, prefix) {
       onmouseleave: (e) => e.currentTarget.style.background = '',
       onclick: () => {
         addState.nazwa = it.nazwa;
-        addState.kwota = it.kwota;
+        // Kwota: nadpisz tylko jeśli user nic nie wpisał (autofill nie kradnie ręcznej wartości)
+        if (!addState.kwota || addState.kwota === 0) addState.kwota = it.kwota;
         addState.kategoria = it.kategoria;
         if (addState.tryb === 'transakcja') addState.kierunek = it.kierunek;
         host.style.display = 'none';
