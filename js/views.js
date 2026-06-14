@@ -789,7 +789,7 @@ const DISP_OPTS_PLAN = [
   { val: 'list',  svg: '<line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>' },
   { val: 'bar',   svg: '<rect x="3" y="9" width="18" height="6" rx="0.5"/><rect x="3" y="9" width="11" height="6" rx="0.5" fill="currentColor" stroke="none"/>' },
   { val: 'donut', svg: '<circle cx="12" cy="12" r="7.5"/><path d="M12,4.5 A7.5,7.5 0 0,1 19,15" fill="none" stroke-linecap="round" stroke-width="3"/>' },
-  { val: 'big',   svg: '<text x="3" y="17" font-family="Anton, sans-serif" font-size="16" fill="currentColor" stroke="none">99</text>' },
+  { val: 'big',   svg: '<rect x="3" y="5" width="11" height="14" rx="0.5"/><rect x="16" y="9" width="5" height="10" rx="0.5" fill="currentColor" stroke="none"/>' },
 ];
 
 // Charts-specific opts: line (blob) / bars (dots)
