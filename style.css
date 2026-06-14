@@ -394,6 +394,54 @@ body.ctrls-closed .ctrl-host { display: none; }
   font-family: 'Inter', sans-serif;
 }
 
+/* Plan BIG mode — nazwa po lewej, duża "zostało" + szary "/ planowane" po prawej */
+.plan-big {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--border-2);
+  cursor: pointer;
+  transition: opacity 0.12s;
+}
+.plan-big:hover { opacity: 0.75; }
+.plan-big.empty { opacity: 0.35; }
+.plan-big.warn { border-left: 3px solid var(--accent); padding-left: 10px; margin-left: -10px; }
+.plan-big.over { border-left: 3px solid var(--danger); padding-left: 10px; margin-left: -10px; }
+.plan-big-nm {
+  font-size: var(--txt-name-size);
+  font-weight: var(--txt-name-weight);
+  color: var(--fg);
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.plan-big-val {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  white-space: nowrap;
+}
+.plan-big-left {
+  font-family: 'Anton', sans-serif;
+  font-size: 42px;
+  letter-spacing: -1.5px;
+  line-height: 1;
+  color: var(--fg);
+}
+.plan-big-plan {
+  font-family: 'Anton', sans-serif;
+  font-size: 24px;
+  letter-spacing: -0.8px;
+  line-height: 1;
+  color: var(--muted);
+}
+body.big-text .plan-big-left { font-size: 54px; }
+body.big-text .plan-big-plan { font-size: 32px; }
+
 /* Entry anim też dla planu donut */
 .plan-donut {
   opacity: 0;

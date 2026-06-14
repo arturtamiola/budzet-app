@@ -201,6 +201,9 @@ function renderPlan() {
   } else if (mode === 'donut') {
     // Donut = 3 kol, bez kafelków — same kółka + tekst pod spodem
     tiles = el('div', { class: 'plan-grid-donut' }, CATS.map(k => planDonutTile(k)));
+  } else if (mode === 'big') {
+    // Big — nazwa po lewej, duża kwota "zostało" + szary planowany po prawej
+    tiles = el('div', {}, CATS.map(k => planBigRow(k)));
   } else {
     // list (default) — current planRow
     tiles = el('div', {}, CATS.map(k => planRow(k)));
@@ -290,6 +293,24 @@ function planDonutTile(kat) {
     el('div', { class: 'plan-donut-nm' }, [kat]),
     el('div', { class: 'plan-donut-amt num' }, [plan > 0 ? fmtH(left) : '—']),
     el('div', { class: 'plan-donut-limit' }, [`/ ${plan > 0 ? fmtH(plan) : '0'}`]),
+  ]);
+}
+
+// Plan: BIG — nazwa po lewej, duża "zostało" + szary "/ planowane" po prawej.
+// Same border-left akcent dla over/warn, bez wewnętrznego paska.
+function planBigRow(kat) {
+  const actual = sumCat(kat);
+  const plan = getPlan(kat);
+  const pct = plan > 0 ? Math.round((actual / plan) * 100) : 0;
+  const empty = actual === 0 && plan === 0;
+  const left = plan - actual;
+  const cls = 'plan-big' + (empty ? ' empty' : '') + (pct >= 100 ? ' over' : pct >= 80 ? ' warn' : '');
+  return el('div', { class: cls, onclick: () => openPlanEdit() }, [
+    el('div', { class: 'plan-big-nm' }, [kat]),
+    el('div', { class: 'plan-big-val' }, [
+      el('span', { class: 'plan-big-left num' }, [plan > 0 ? fmtH(left) : '—']),
+      plan > 0 ? el('span', { class: 'plan-big-plan num' }, [`/ ${fmtH(plan)}`]) : null,
+    ].filter(Boolean)),
   ]);
 }
 
@@ -763,11 +784,12 @@ const DISP_OPTS_DEFAULT = [
   { val: 'grid3', svg: '<rect x="3" y="3" width="5" height="18"/><rect x="9.5" y="3" width="5" height="18"/><rect x="16" y="3" width="5" height="18"/>' },
 ];
 
-// Plan-specific opts: list / bar (pasek-centryczny) / donut (kółko)
+// Plan-specific opts: list / bar (pasek-centryczny) / donut (kółko) / big (duże liczby)
 const DISP_OPTS_PLAN = [
   { val: 'list',  svg: '<line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>' },
   { val: 'bar',   svg: '<rect x="3" y="9" width="18" height="6" rx="0.5"/><rect x="3" y="9" width="11" height="6" rx="0.5" fill="currentColor" stroke="none"/>' },
   { val: 'donut', svg: '<circle cx="12" cy="12" r="7.5"/><path d="M12,4.5 A7.5,7.5 0 0,1 19,15" fill="none" stroke-linecap="round" stroke-width="3"/>' },
+  { val: 'big',   svg: '<text x="3" y="17" font-family="Anton, sans-serif" font-size="16" fill="currentColor" stroke="none">99</text>' },
 ];
 
 // Charts-specific opts: line (blob) / bars (dots)
