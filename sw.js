@@ -4,7 +4,7 @@
 //   - dane (dane.json, dane-marta.json, Apps Script) → network-first (świeże gdy online, fallback z cache offline)
 //   - bump CACHE_VERSION = wymusza refresh starych assetów
 
-const CACHE_VERSION = 'v8';
+const CACHE_VERSION = 'v9';
 const STATIC_CACHE = `budzet-static-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `budzet-runtime-${CACHE_VERSION}`;
 
@@ -32,16 +32,16 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// Activate — czyść stare cache'e po bumpe CACHE_VERSION
+// Activate — czyść stare cache'e po bumpe CACHE_VERSION + force reload otwartych klientów
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys()
-      .then((keys) => Promise.all(
-        keys.filter((k) => k !== STATIC_CACHE && k !== RUNTIME_CACHE)
-            .map((k) => caches.delete(k))
-      ))
-      .then(() => self.clients.claim())
-  );
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter(k => k !== STATIC_CACHE && k !== RUNTIME_CACHE).map(k => caches.delete(k)));
+    await self.clients.claim();
+    // Po claim wymuś reload wszystkich otwartych zakładek, żeby dostały nowy JS bez ręcznego refreshu
+    const clientsList = await self.clients.matchAll({ type: 'window' });
+    clientsList.forEach(c => { try { c.navigate(c.url); } catch (_) {} });
+  })());
 });
 
 // Fetch — routing

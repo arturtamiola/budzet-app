@@ -193,12 +193,23 @@
 <script src="js/modals.js"></script>
 <script src="js/app.js"></script>
 <script>
-  // Service Worker — offline support + cache
+  // Service Worker — offline support + cache. updateViaCache='none' wymusza
+  // świeżego sw.js na każdym page load → szybsze upgrade po bumpe CACHE_VERSION.
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js')
-        .then((reg) => console.log('[SW] zarejestrowany, scope:', reg.scope))
+      navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
+        .then((reg) => {
+          console.log('[SW] zarejestrowany, scope:', reg.scope);
+          reg.update(); // proaktywnie sprawdź czy jest nowsza wersja
+        })
         .catch((err) => console.warn('[SW] błąd rejestracji:', err));
+      // Gdy nowy SW przejmie kontrolę → reload (nowy JS bez ręcznego Ctrl+Shift+R)
+      let reloaded = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (reloaded) return;
+        reloaded = true;
+        location.reload();
+      });
     });
   }
 </script>
