@@ -6,9 +6,16 @@ const ML_FULL = ['Styczeń','Luty','Marzec','Kwiecień','Maj','Czerwiec','Lipiec
 // CATS (legacy) zostaje jako alias dla aktualnej profile listy — backward-compat z views/modals.
 const CATS_ARTUR = ['Zakupy','Restauracje','Transport','Nela','Koty','Sport','Firma','Dom','Marta Zdrowie','Artur Zdrowie','Ubrania / Kosmetyki','Fryzjer / Paznokcie','Podróże','Inne'];
 const CATS_MARTA = ['Zakupy','Restauracje','Transport','Nela','Koty','Sport','Firma','Media','Marta Zdrowie','Artur Zdrowie','Moje różne','Fryzjer / Paznokcie','Podróże','Inne'];
+// Excel export: fundamenty (Firma, Dom/Media, Zdrowie) na początku, codzienne w środku, lifestyle dalej, Inne na końcu
+const CATS_EXCEL_ARTUR = ['Firma','Dom','Marta Zdrowie','Artur Zdrowie','Nela','Koty','Zakupy','Restauracje','Transport','Sport','Podróże','Ubrania / Kosmetyki','Fryzjer / Paznokcie','Inne'];
+const CATS_EXCEL_MARTA = ['Firma','Media','Marta Zdrowie','Artur Zdrowie','Nela','Koty','Zakupy','Restauracje','Transport','Sport','Podróże','Moje różne','Fryzjer / Paznokcie','Inne'];
 function getCats() {
   const p = (typeof STATE !== 'undefined') ? STATE.activeProfile : 'artur';
   return p === 'marta' ? CATS_MARTA : CATS_ARTUR;
+}
+function getExcelCats() {
+  const p = (typeof STATE !== 'undefined') ? STATE.activeProfile : 'artur';
+  return p === 'marta' ? CATS_EXCEL_MARTA : CATS_EXCEL_ARTUR;
 }
 let CATS = CATS_ARTUR;  // mutowane przy profile switch w switchProfile()
 
@@ -230,7 +237,7 @@ function fillMonthTemplate(wb, rok, mi) {
     .map(w => ({ ...w, _kw: effectiveKw(w) }))
     .filter(w => w._kw != null);
   const przychody = monthWpisy.filter(w => w.kierunek === 'przychod' && w.kwota > 0);
-  const wydCats = CATS;
+  const wydCats = getExcelCats(); // Excel kolejność: fundamenty na początku, Inne na końcu
   const incCats = getIncomeCats();
 
   // === Podsumowanie: tytuł ===
