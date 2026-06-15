@@ -101,22 +101,83 @@ function updateSumDisplay() {
   }
 }
 
-function savePlanEdit(scope) {
+async function savePlanEdit(scope) {
   if (!planEditState) return;
   if (!STATE.localEdits.planOverrides) STATE.localEdits.planOverrides = {};
   const { yr, mi, values } = planEditState;
+  const YEAR_TO = 2050;
+
+  // Zbierz wiersze do cloud writeback: per kategoria, per rok, z 12 polami miesięcy.
+  // Dla każdego (rok, kat) musimy znać WSZYSTKIE 12 miesięcy — apka pamięta tylko niektóre w STATE.data, więc dla
+  // brakujących bierzemy z istniejącego planu (getPlan), a dla nadpisywanych wstawiamy nową wartość.
+  const updates = []; // [{rok, kategoria, Sty..Gru}]
+
   if (scope === 'this') {
+    // override tylko (yr, mi) per kategoria
     CATS.forEach(k => { STATE.localEdits.planOverrides[`${yr}_${k}_${mi}`] = values[k]; });
+    CATS.forEach(k => {
+      const row = { rok: yr, kategoria: k };
+      ML.forEach((mn, idx) => {
+        row[mn] = (idx + 1 === mi) ? values[k] : getPlan(k, yr, idx + 1);
+      });
+      updates.push(row);
+    });
     toast(`Zaktualizowano plan na ${ML_FULL[mi - 1]} ${yr}`);
   } else {
-    for (let m = 1; m <= 12; m++) {
-      CATS.forEach(k => { STATE.localEdits.planOverrides[`${yr}_${k}_${m}`] = values[k]; });
+    // NA STAŁE: nadpisz wszystkie miesiące od bieżącego (yr, mi) do (2050, 12).
+    // Dla roku yr: nadpisz mi..12, pozostaw historyczne 1..mi-1. Dla yr+1..2050: nadpisz cały rok.
+    for (let r = yr; r <= YEAR_TO; r++) {
+      CATS.forEach(k => {
+        const row = { rok: r, kategoria: k };
+        ML.forEach((mn, idx) => {
+          const m = idx + 1;
+          if (r > yr || m >= mi) {
+            STATE.localEdits.planOverrides[`${r}_${k}_${m}`] = values[k];
+            row[mn] = values[k];
+          } else {
+            row[mn] = getPlan(k, r, m); // historyczne miesiące bieżącego roku nietknięte
+          }
+        });
+        updates.push(row);
+      });
     }
-    toast(`Zaktualizowano plan na stałe (${yr})`);
+    toast(`Zaktualizowano plan na stałe od ${ML_FULL[mi - 1]} ${yr} do 2050`);
   }
   saveLocal();
   closeSheet();
   render();
+
+  // Cloud writeback — bulkSetPlany w paczkach po 100. Cloud only.
+  if (STATE.dataMode === 'cloud' && getCloudUrl() && STATE.cloudToken) {
+    syncStart('Zapis planów do chmury...');
+    try {
+      const CHUNK = 100;
+      let total = 0;
+      for (let i = 0; i < updates.length; i += CHUNK) {
+        const chunk = updates.slice(i, i + CHUNK);
+        const r = await fetch(getCloudUrl(), {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ token: STATE.cloudToken, action: 'bulkSetPlany', plany: chunk }),
+        });
+        const j = await r.json();
+        if (!j.ok) throw new Error(j.error || 'unknown');
+        total += (j.updated || 0) + (j.added || 0);
+      }
+      // Aktualizuj STATE.data.plany w pamięci żeby kolejny render miał świeże + cache
+      updates.forEach(u => {
+        const idx = STATE.data.plany.findIndex(p => p.rok === u.rok && p.kategoria === u.kategoria);
+        if (idx >= 0) STATE.data.plany[idx] = u;
+        else STATE.data.plany.push(u);
+      });
+      try { localStorage.setItem(pk('cloudCache'), JSON.stringify(STATE.data)); } catch (_) {}
+      toast(`Cloud zapis OK (${total} wierszy)`);
+    } catch (e) {
+      toast('Cloud zapis planów: ' + e.message, 'err');
+    } finally {
+      syncEnd();
+    }
+  }
 }
 
 // ============== SHEETS ==============
