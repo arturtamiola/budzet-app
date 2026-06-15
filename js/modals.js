@@ -28,9 +28,13 @@ function renderPlanEditBody() {
     el('div', { class: 'plan-tile-amt' }, [
       el('button', { class: 'plan-tile-btn', onclick: () => adjust(kat, -STEP) }, ['−']),
       el('input', {
-        type: 'number', inputmode: 'numeric',
-        value: planEditState.values[kat] || 0,
-        oninput: (e) => { planEditState.values[kat] = Number(e.target.value) || 0; updateSumDisplay(); },
+        type: 'text', inputmode: 'numeric',
+        value: String(planEditState.values[kat] || 0),
+        oninput: (e) => {
+          const cleaned = e.target.value.replace(/[^0-9]/g, '');
+          planEditState.values[kat] = Number(cleaned) || 0;
+          updateSumDisplay();
+        },
         class: 'plan-tile-input',
       }),
       el('button', { class: 'plan-tile-btn', onclick: () => adjust(kat, STEP) }, ['+']),
@@ -48,9 +52,13 @@ function renderPlanEditBody() {
     el('div', { style: 'flex:1;text-align:right' }, [
       el('div', { class: 'caps-i', style: 'margin-bottom:4px' }, ['Cel (budżet)']),
       el('input', {
-        type: 'number', inputmode: 'numeric', id: 'plan-target-input',
-        value: planEditState.target,
-        oninput: (e) => { planEditState.target = Number(e.target.value) || 0; updateSumDisplay(); },
+        type: 'text', inputmode: 'numeric', id: 'plan-target-input',
+        value: String(planEditState.target),
+        oninput: (e) => {
+          const cleaned = e.target.value.replace(/[^0-9]/g, '');
+          planEditState.target = Number(cleaned) || 0;
+          updateSumDisplay();
+        },
         class: 'plan-target-input',
       }),
     ]),
@@ -103,6 +111,13 @@ function updateSumDisplay() {
 
 async function savePlanEdit(scope) {
   if (!planEditState) return;
+  // Guard: jeśli suma kategorii nie zgadza się z celem, blokuj zapis (button.disabled nie zawsze blokuje onclick)
+  const actualSum = Object.values(planEditState.values).reduce((s, v) => s + (v || 0), 0);
+  if (Math.abs(actualSum - planEditState.target) > 0.01) {
+    const diff = actualSum - planEditState.target;
+    toast(diff > 0 ? `Przekraczasz cel o ${fmt(diff)} — popraw kategorie` : `Brakuje ${fmt(-diff)} do celu — popraw kategorie`, 'err');
+    return;
+  }
   if (!STATE.localEdits.planOverrides) STATE.localEdits.planOverrides = {};
   const { yr, mi, values } = planEditState;
   const YEAR_TO = 2050;
