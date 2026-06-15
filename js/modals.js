@@ -1,10 +1,22 @@
 // ============== PLAN EDIT (lightbox) ==============
 let planEditState = null;
 
+// Persistent cel (target) per profil. Default Marta = 7400 (jej miesięczny budżet),
+// Artur = null (= auto-sum z planów, do ustawienia w apce). User może zmienić w plan-edit input.
+const DEFAULT_PLAN_TARGETS = { marta: 7400, artur: null };
+
+function getPlanTarget() {
+  const stored = localStorage.getItem(pk('planTarget'));
+  if (stored != null && stored !== '') return Number(stored) || 0;
+  return DEFAULT_PLAN_TARGETS[STATE.activeProfile] != null ? DEFAULT_PLAN_TARGETS[STATE.activeProfile] : null;
+}
+
 function openPlanEdit() {
   const values = {};
   CATS.forEach(k => values[k] = getPlan(k));
-  const target = Object.values(values).reduce((s, v) => s + v, 0);
+  const sum = Object.values(values).reduce((s, v) => s + v, 0);
+  const stored = getPlanTarget();
+  const target = stored != null ? stored : sum; // fallback do sumy jeśli nigdy nie ustawiony
   planEditState = { yr: STATE.yr, mi: STATE.mi, values, target };
   $('#plan-edit-title').textContent = 'Plan';
   renderPlanEditBody();
@@ -118,6 +130,8 @@ async function savePlanEdit(scope) {
     toast(diff > 0 ? `Przekraczasz cel o ${fmt(diff)} — popraw kategorie` : `Brakuje ${fmt(-diff)} do celu — popraw kategorie`, 'err');
     return;
   }
+  // Persist target per profile — user edytuje, my pamiętamy
+  try { localStorage.setItem(pk('planTarget'), String(planEditState.target)); } catch (_) {}
   if (!STATE.localEdits.planOverrides) STATE.localEdits.planOverrides = {};
   const { yr, mi, values } = planEditState;
   const YEAR_TO = 2050;
