@@ -4,7 +4,7 @@
 //   - dane (dane.json, dane-marta.json, Apps Script) → network-first (świeże gdy online, fallback z cache offline)
 //   - bump CACHE_VERSION = wymusza refresh starych assetów
 
-const CACHE_VERSION = 'v14';
+const CACHE_VERSION = 'v15';
 const STATIC_CACHE = `budzet-static-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `budzet-runtime-${CACHE_VERSION}`;
 

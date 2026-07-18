@@ -843,7 +843,10 @@ body.kp-open #keypad-root { transform: translate3d(0, 0, 0); pointer-events: aut
 .kp-input-caret {
   position: absolute;
   width: 7px;
-  margin-left: 1px;
+  /* Pionowa kreska (::before) jest na ŚRODKU spanu (left:50%). JS ustawia left
+     dokładnie na granicy znaków, więc margin -3.5px centruje kreskę na tej granicy
+     (daszek/podstawka I-beam symetrycznie po obu stronach). */
+  margin-left: -3.5px;
   pointer-events: none;
   color: var(--muted);
   border-top: 2px solid currentColor;

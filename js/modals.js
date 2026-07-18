@@ -975,7 +975,9 @@ const Keypad = {
     // przesunięciem o połowę letter-spacing w lewo żeby caret był wizualnie w "środku" overlap.
     const ls = parseFloat(cs.letterSpacing) || 0;
     const lsOffset = ls < 0 && txtBefore.length > 0 ? ls / 2 : 0;
-    caret.style.left = (input.offsetLeft + padL + txtWidth + lsOffset) + 'px';
+    // scrollLeft: przy tekście dłuższym niż pole input przewija się w poziomie —
+    // pozycja caretu musi być względem widocznego okna, nie początku tekstu.
+    caret.style.left = (input.offsetLeft + padL + txtWidth + lsOffset - input.scrollLeft) + 'px';
     caret.style.top = topOffset + 'px';
     caret.style.height = caretH + 'px';
   },
@@ -992,7 +994,8 @@ const Keypad = {
       const rect = input.getBoundingClientRect();
       const cs = getComputedStyle(input);
       const padL = parseFloat(cs.paddingLeft) || 0;
-      const clickX = e.clientX - rect.left - padL;
+      // + scrollLeft: klik mapujemy na pozycję w PEŁNYM tekście, nie tylko widocznym oknie
+      const clickX = e.clientX - rect.left - padL + input.scrollLeft;
       const val = a.val;
       let bestIdx = 0;
       let bestDiff = Infinity;
